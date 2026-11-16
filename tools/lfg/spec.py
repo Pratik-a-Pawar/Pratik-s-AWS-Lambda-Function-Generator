@@ -1,5 +1,6 @@
 """Load and validate function specs against the JSON Schema."""
 
+import datetime
 import json
 from dataclasses import dataclass
 from functools import lru_cache
@@ -21,18 +22,29 @@ class SpecError:
     message: str
 
 
+def _iso_dates(node):
+    """Convert YAML date/datetime scalars to ISO-8601 strings."""
+    if isinstance(node, (datetime.date, datetime.datetime)):
+        return node.isoformat()
+    if isinstance(node, dict):
+        return {key: _iso_dates(value) for key, value in node.items()}
+    if isinstance(node, list):
+        return [_iso_dates(item) for item in node]
+    return node
+
+
 def load_spec(path: Path) -> dict:
     try:
         text = Path(path).read_text(encoding="utf-8")
-    except OSError as exc:
-        raise SpecLoadError(f"cannot read {path}: {exc.strerror or exc}") from exc
+    except (OSError, UnicodeDecodeError) as exc:
+        raise SpecLoadError(f"cannot read {path}: {getattr(exc, 'strerror', None) or exc}") from exc
     try:
         data = yaml.safe_load(text)
-    except yaml.YAMLError as exc:
+    except (yaml.YAMLError, ValueError) as exc:
         raise SpecLoadError(f"{path} is not valid YAML: {exc}") from exc
     if not isinstance(data, dict):
         raise SpecLoadError(f"{path}: top level must be a mapping")
-    return data
+    return _iso_dates(data)
 
 
 @lru_cache(maxsize=1)

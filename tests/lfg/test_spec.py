@@ -137,3 +137,33 @@ def test_load_non_mapping(tmp_path):
     path.write_text("- a\n- b\n")
     with pytest.raises(SpecLoadError):
         load_spec(path)
+
+
+def test_load_impossible_date(tmp_path):
+    path = tmp_path / "s.yaml"
+    path.write_text("expires: 2027-02-30\n")
+    with pytest.raises(SpecLoadError):
+        load_spec(path)
+
+
+def test_load_binary_file(tmp_path):
+    path = tmp_path / "s.yaml"
+    path.write_bytes(b"\xff\xfe\x00\x80\x81")
+    with pytest.raises(SpecLoadError):
+        load_spec(path)
+
+
+def test_unquoted_date_is_normalised(good_dir):
+    spec_file = good_dir / "function.spec.yaml"
+    text = spec_file.read_text().replace(
+        "risk_acceptances: []",
+        "risk_acceptances:\n"
+        "  - rule_id: LFG-RUN-002\n"
+        "    justification: Twenty characters ok\n"
+        "    accepted_by: pratik-a-pawar\n"
+        "    expires: 2027-01-31\n",
+    )
+    spec_file.write_text(text)
+    spec = load_spec(spec_file)
+    assert spec["risk_acceptances"][0]["expires"] == "2027-01-31"
+    assert validate_spec(spec) == []

@@ -29,3 +29,15 @@ def test_missing_spec(tmp_path, capsys):
 
 def test_unknown_command():
     assert main(["frobnicate"]) == 2
+
+
+def test_invalid_yaml_exits_2(good_dir, capsys):
+    (good_dir / "function.spec.yaml").write_text(": :\n- [")
+    assert main(["validate-spec", str(good_dir)]) == 2
+    assert "Traceback" not in capsys.readouterr().err
+
+
+def test_binary_spec_exits_2(good_dir, capsys):
+    (good_dir / "function.spec.yaml").write_bytes(b"\xff\xfe\x00\x80\x81")
+    assert main(["validate-spec", str(good_dir)]) == 2
+    assert "Traceback" not in capsys.readouterr().err
