@@ -1,0 +1,63 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Report IAM access keys older than the allowed age.
+
+Parameters:
+  Stage:
+    Type: String
+    AllowedValues: [dev, prod]
+
+Resources:
+  Function:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub lfg-${Stage}-iam-key-age-audit
+      CodeUri: src/
+      Handler: app.handler
+      Runtime: python3.13
+      Architectures: [arm64]
+      Timeout: 30
+      MemorySize: 256
+      PermissionsBoundary: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/lfg-function-boundary
+      LoggingConfig:
+        LogGroup: !Ref LogGroup
+        LogFormat: JSON
+      DeadLetterQueue:
+        Type: SQS
+        TargetArn: !GetAtt FailureQueue.Arn
+      Environment:
+        Variables:
+          MAX_KEY_AGE_DAYS: "90"
+          ALERT_TOPIC_ARN: !Ref AlertTopic
+      Policies:
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - iam:GenerateCredentialReport
+                - iam:GetCredentialReport
+              Resource: "*"
+            - Effect: Allow
+              Action: sns:Publish
+              Resource: !Ref AlertTopic
+      Events:
+        Daily:
+          Type: ScheduleV2
+          Properties:
+            ScheduleExpression: rate(1 day)
+            ScheduleExpressionTimezone: UTC
+            PermissionsBoundary: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/lfg-function-boundary
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/lfg-${Stage}-iam-key-age-audit
+      RetentionInDays: 30
+
+  FailureQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      MessageRetentionPeriod: 1209600
+
+  AlertTopic:
+    Type: AWS::SNS::Topic
