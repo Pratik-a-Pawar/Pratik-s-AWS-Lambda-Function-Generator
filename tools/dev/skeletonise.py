@@ -19,6 +19,7 @@ def _plan(root: Path) -> tuple[list[tuple[Path, Path]], list[Path]]:
     """Check every lab and return (copies, skeleton directories), changing nothing."""
     resolved_root = root.resolve()
     copies: list[tuple[Path, Path]] = []
+    seen: set[str] = set()
     skeleton_dirs: list[Path] = []
     for lab in load_manifest(root).values():
         lab_dir = root / lab["dir"]
@@ -29,6 +30,9 @@ def _plan(root: Path) -> tuple[list[tuple[Path, Path]], list[Path]]:
         if skeleton_dir.exists():
             skeleton_dirs.append(skeleton_dir)
         for owned in lab["owned"]:
+            if owned in seen:
+                raise ValueError(f"owned path is listed more than once: {owned}")
+            seen.add(owned)
             source = skeleton_dir / owned
             target = root / owned
             if source.is_symlink() or not _inside(source, resolved_root):
@@ -57,6 +61,7 @@ def apply(root: Path) -> list[Path]:
     replaced = []
     for source, target in copies:
         target.parent.mkdir(parents=True, exist_ok=True)
+        target.unlink(missing_ok=True)  # never write through a hard link
         shutil.copyfile(source, target)
         replaced.append(target)
     for skeleton_dir in skeleton_dirs:

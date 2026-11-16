@@ -1,4 +1,5 @@
 import importlib.util
+import os
 from pathlib import Path
 
 import pytest
@@ -191,3 +192,38 @@ def test_main_reports_errors_in_one_line_and_returns_2(tmp_path, capsys, setup):
 
 def test_manifest_error_is_a_value_error():
     assert issubclass(ManifestError, ValueError)
+
+
+def test_owned_path_repeated_in_one_lab_is_refused(tmp_path):
+    root = make_repo(tmp_path, ["tools/real.py", "tools/real.py"], {"tools/real.py": "skeleton\n"})
+    with pytest.raises(ValueError, match="tools/real.py"):
+        skeletonise.apply(root)
+    assert untouched(root)
+
+
+def test_owned_path_shared_by_two_labs_is_refused(tmp_path):
+    root = make_repo(tmp_path, ["tools/real.py"], {"tools/real.py": "skeleton\n"})
+    manifest = root / "labs" / "manifest.yaml"
+    manifest.write_text(
+        manifest.read_text()
+        + '  "02":\n    title: Two\n    dir: labs/02\n    owned: [tools/real.py]\n'
+        "    checks: []\n",
+        encoding="utf-8",
+    )
+    other = root / "labs" / "02" / "skeleton" / "tools"
+    other.mkdir(parents=True)
+    (other / "real.py").write_text("second\n")
+    with pytest.raises(ValueError, match="tools/real.py"):
+        skeletonise.apply(root)
+    assert untouched(root)
+
+
+def test_hard_linked_target_is_not_written_through(tmp_path):
+    root = make_repo(tmp_path, ["tools/real.py"], {"tools/real.py": "skeleton\n"})
+    victim = tmp_path / "victim.txt"
+    victim.write_text("victim\n")
+    (root / "tools" / "real.py").unlink()
+    os.link(victim, root / "tools" / "real.py")
+    skeletonise.apply(root)
+    assert victim.read_text() == "victim\n"
+    assert (root / "tools" / "real.py").read_text() == "skeleton\n"

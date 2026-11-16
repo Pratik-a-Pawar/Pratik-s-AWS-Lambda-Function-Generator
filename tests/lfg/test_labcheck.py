@@ -151,3 +151,19 @@ def test_manifest_dir_and_owned_are_validated(tmp_path, fields):
     root = make_repo(tmp_path, f'labs:\n  "01":\n    title: One\n    {fields}\n    checks: []\n')
     with pytest.raises(ManifestError):
         load_manifest(root)
+
+
+@pytest.mark.parametrize("fields", [
+    'dir: labs/01\n    owned: []\n    checks: ["a\\0b.py"]',
+    'dir: labs/01\n    owned: ["a\\0b.py"]\n    checks: []',
+    'dir: "labs/\\x0001"\n    owned: []\n    checks: []',
+    'dir: labs/01\n    owned: []\n    checks: ["a\\nb.py"]',
+    'dir: labs/01\n    owned: []\n    checks: ["a\\x7fb.py"]',
+])
+def test_control_characters_in_manifest_paths_are_refused(tmp_path, capsys, fields):
+    root = make_repo(tmp_path, f'labs:\n  "01":\n    title: One\n    {fields}\n')
+    with pytest.raises(ManifestError, match="lab '01'"):
+        load_manifest(root)
+    assert run("01", root) == 2
+    err = capsys.readouterr().err
+    assert err.startswith("error:") and err.count("\n") == 1

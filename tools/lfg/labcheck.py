@@ -16,16 +16,24 @@ class ManifestError(ValueError):
     """labs/manifest.yaml is missing or malformed."""
 
 
+def _no_control_characters(value: str, lab: str, key: str) -> None:
+    if any(ord(c) < 0x20 or ord(c) == 0x7F for c in value):
+        raise ManifestError(f"{MANIFEST}: lab {lab!r} {key!r} has a control character")
+
+
 def _string_list(entry: dict, key: str, lab: str) -> list[str]:
     value = entry.get(key)
     if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
         raise ManifestError(f"{MANIFEST}: lab {lab!r} needs a list of strings for {key!r}")
+    for item in value:
+        _no_control_characters(item, lab, key)
     return value
 
 
 def _relative_path(value: object, lab: str, key: str) -> str:
     if not isinstance(value, str) or not value:
         raise ManifestError(f"{MANIFEST}: lab {lab!r} {key!r} needs non-empty strings")
+    _no_control_characters(value, lab, key)
     if _escapes_root(value):
         raise ManifestError(f"{MANIFEST}: lab {lab!r} {key!r} path escapes the repository: {value}")
     return value
@@ -76,9 +84,12 @@ def run(lab: str, root: Path, extra_args: list[str] | None = None) -> int:
     resolved_root = root.resolve()
     paths = []
     for check in checks:
-        path = (root / check).resolve()
-        if check.startswith("-") or _escapes_root(check) or not path.is_file() \
-                or not path.is_relative_to(resolved_root):
+        try:
+            path = (root / check).resolve()
+            usable = path.is_file() and path.is_relative_to(resolved_root)
+        except (ValueError, OSError):
+            usable = False
+        if check.startswith("-") or _escapes_root(check) or not usable:
             print(f"error: lab {lab!r} check {check!r} is not a file in the repository",
                   file=sys.stderr)
             return 2
