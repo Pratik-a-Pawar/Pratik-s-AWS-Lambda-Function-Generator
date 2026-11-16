@@ -12,6 +12,66 @@ allowed_resource_types:
   - AWS::SQS::Queue
   - AWS::SNS::Topic
 
+# Only these keys may appear on the function resource, in its Properties, and in the
+# Properties of its trigger event. SAM can create or attach permissions through many other
+# properties, so the list of what is allowed is the only fail-closed choice (LFG-TPL-003).
+allowed_function_attributes:
+  - Type
+  - Properties
+  - Metadata
+  - DependsOn
+
+allowed_function_properties:
+  - FunctionName
+  - Description
+  - CodeUri
+  - Handler
+  - Runtime
+  - Architectures
+  - Timeout
+  - MemorySize
+  - PermissionsBoundary
+  - Policies
+  - Role
+  - Environment
+  - Events
+  - LoggingConfig
+  - DeadLetterQueue
+  - EventInvokeConfig
+  - FunctionUrlConfig
+  - ReservedConcurrentExecutions
+  - Tracing
+  - KmsKeyArn
+  - CodeSigningConfigArn
+  - Tags
+
+allowed_event_properties:
+  ScheduleV2:
+    - ScheduleExpression
+    - ScheduleExpressionTimezone
+    - PermissionsBoundary
+    - RoleArn
+    - Name
+    - Description
+    - State
+    - Input
+    - FlexibleTimeWindow
+    - StartDate
+    - EndDate
+    - DeadLetterConfig
+    - RetryPolicy
+    - OmitName
+  EventBridgeRule:
+    - Pattern
+    - RuleName
+    - State
+    - Input
+    - InputPath
+    - InputTransformer
+    - DeadLetterConfig
+    - RetryPolicy
+    - Target
+
 # Actions that cannot be scoped to a resource, so "Resource: *" is accepted for them.
 # Each entry must be confirmed against the AWS Service Authorization Reference;
 # Lab 02 asks Pratik to do so.
@@ -72,6 +132,13 @@ rules:
     cwe: CWE-1188
     enforced_by: policy-check
     summary: "A `Globals` section is not allowed"
+  - id: LFG-TPL-003
+    title: Allow-listed properties only
+    class: deny
+    severity: high
+    cwe: CWE-1188
+    enforced_by: policy-check
+    summary: "Only allow-listed function attributes, function properties and event properties may appear"
   - id: LFG-NAME-001
     title: Function naming convention
     class: require

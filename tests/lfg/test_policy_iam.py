@@ -138,6 +138,21 @@ def _rename_sns_to_case(spec, template):
     _statements(template)[1]["Action"] = "SNS:PUBLISH"
 
 
+def _res1(value):
+    return lambda spec, template: _statements(template)[1].update(Resource=value)
+
+
+def _event_property(name, value):
+    def mutate(spec, template):
+        _props(template)["Events"]["Daily"]["Properties"][name] = value
+
+    return mutate
+
+
+BOUNDARY = "arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/lfg-function-boundary"
+IAM2 = {"LFG-IAM-006", "LFG-IAM-008"}
+
+
 MUTATIONS = [
     ("action_star", _stmt0(Action="*"), {"LFG-IAM-001"}),
     (
@@ -273,6 +288,96 @@ MUTATIONS = [
     (
         "spec_extra_malformed_entry_is_ignored",
         _spec_extra_entry(["not", "a", "mapping"]),
+        set(),
+    ),
+    # R1: "?" is a wildcard.
+    ("question_mark_pass_role_middle", _add("iam:Pass?ole"), IAM2),
+    ("question_mark_pass_role_end", _add("iam:PassRol?"), IAM2),
+    ("question_mark_bucket_policy", _add("s3:PutBucket?olicy"), IAM2),
+    ("question_mark_plain", _add("s3:Get?bject"), {"LFG-IAM-008"}),
+    # R2: action form.
+    ("action_double_star", _stmt0(Action="**"), {"LFG-IAM-001"}),
+    ("action_star_question", _stmt0(Action="*?"), {"LFG-IAM-001"}),
+    ("action_star_colon_star", _stmt0(Action="*:*"), {"LFG-IAM-001"}),
+    ("action_service_question", _stmt0(Action="i?m:PassRole"), {"LFG-IAM-001"}),
+    ("action_service_leading_question", _stmt0(Action="?am:PassRole"), {"LFG-IAM-001"}),
+    (
+        "action_empty_string_in_list",
+        _stmt0(Action=["iam:GetCredentialReport", ""]),
+        {"LFG-IAM-007"},
+    ),
+    ("action_leading_space", _stmt0(Action=" iam:PassRole"), {"LFG-IAM-007"}),
+    ("action_no_service", _stmt0(Action="ListUsers"), {"LFG-IAM-007"}),
+    ("action_empty_name", _stmt0(Action="iam:"), {"LFG-IAM-007"}),
+    # R3: resources that mean "everything".
+    ("res_sub_star", _res1({"Fn::Sub": "*"}), {"LFG-IAM-005"}),
+    ("res_join_star", _res1({"Fn::Join": ["", ["*"]]}), {"LFG-IAM-005"}),
+    ("res_arn_star", _res1("arn:*"), {"LFG-IAM-005"}),
+    ("res_star_slash_star", _res1("*/*"), {"LFG-IAM-005"}),
+    ("res_s3_all", _res1("arn:aws:s3:::*"), {"LFG-IAM-005"}),
+    ("res_logs_all", _res1("arn:aws:logs:*:*:*"), {"LFG-IAM-005"}),
+    (
+        "res_sub_all_in_account",
+        _res1({"Fn::Sub": "arn:${AWS::Partition}:sns:${AWS::Region}:${AWS::AccountId}:*"}),
+        {"LFG-IAM-005"},
+    ),
+    ("res_bucket_objects_scoped", _res1("arn:aws:s3:::my-bucket/*"), set()),
+    (
+        "res_sub_named_scoped",
+        _res1({"Fn::Sub": "arn:${AWS::Partition}:sns:${AWS::Region}:${AWS::AccountId}:lfg-${Stage}-alerts"}),
+        set(),
+    ),
+    ("res_getatt_scoped", _res1({"Fn::GetAtt": ["AlertTopic", "TopicArn"]}), set()),
+    (
+        "res_join_scoped",
+        _res1({"Fn::Join": [":", ["arn", {"Ref": "AWS::Partition"}, "sns", "eu-west-1",
+                                 {"Ref": "AWS::AccountId"}, "topic-name"]]}),
+        set(),
+    ),
+    ("res_sub_list_form_scoped", _res1({"Fn::Sub": ["arn:aws:sns:::${T}", {"T": "x"}]}), set()),
+    ("res_fn_if", _res1({"Fn::If": ["C", "a", "b"]}), {"LFG-IAM-007"}),
+    ("res_ref_extra_key", _res1({"Ref": "A", "Extra": "b"}), {"LFG-IAM-007"}),
+    ("res_import_value", _res1({"Fn::ImportValue": "x"}), {"LFG-IAM-007"}),
+    ("res_ref_not_string", _res1({"Ref": ["A"]}), {"LFG-IAM-007"}),
+    ("res_sub_not_string", _res1({"Fn::Sub": 3}), {"LFG-IAM-007"}),
+    ("res_join_bad_shape", _res1({"Fn::Join": "x"}), {"LFG-IAM-007"}),
+    # R4: the boundary must be exact.
+    (
+        "boundary_suffix_evil",
+        _property("PermissionsBoundary", {"Fn::Sub": BOUNDARY + "-evil"}),
+        {"LFG-IAM-004"},
+    ),
+    (
+        "boundary_in_fn_if",
+        _property(
+            "PermissionsBoundary",
+            {"Fn::If": ["C", "arn:x:policy/Admin", {"Fn::Sub": BOUNDARY}]},
+        ),
+        {"LFG-IAM-004"},
+    ),
+    (
+        "boundary_ref_with_junk",
+        _property("PermissionsBoundary", {"Ref": "x", "Junk": "policy/lfg-function-boundary"}),
+        {"LFG-IAM-004"},
+    ),
+    ("boundary_plain_string", _property("PermissionsBoundary", BOUNDARY), {"LFG-IAM-004"}),
+    (
+        "schedule_boundary_inexact",
+        _event_property("PermissionsBoundary", {"Fn::Sub": BOUNDARY + "-evil"}),
+        {"LFG-IAM-004"},
+    ),
+    # R5: ScheduleV2 RoleArn.
+    (
+        "schedule_role_arn",
+        _event_property("RoleArn", {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/x"}),
+        {"LFG-IAM-004"},
+    ),
+    # R7: statement keys.
+    ("statement_principal", _stmt0(Principal="*"), {"LFG-IAM-007"}),
+    ("statement_not_principal", _stmt0(NotPrincipal="*"), {"LFG-IAM-007"}),
+    (
+        "statement_sid_and_condition",
+        _stmt0(Sid="Report", Condition={"StringEquals": {"aws:RequestedRegion": "eu-west-1"}}),
         set(),
     ),
 ]

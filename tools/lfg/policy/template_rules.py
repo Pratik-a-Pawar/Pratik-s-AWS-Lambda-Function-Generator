@@ -125,6 +125,42 @@ def _check_trigger(spec: dict, name: str, props: dict, catalogue: Catalogue) -> 
     ]
 
 
+def _unlisted(keys, allowed, base: str, what: str) -> list[Violation]:
+    return [
+        Violation("LFG-TPL-003", f"{what} {key!r} is not on the allow-list", f"{base}.{key}")
+        for key in keys
+        if key not in allowed
+    ]
+
+
+def _check_allow_lists(
+    spec: dict, name: str, resource: dict, props: dict, catalogue: Catalogue,
+) -> list[Violation]:
+    base = f"{_TPL}Resources.{name}"
+    out = _unlisted(resource, catalogue.allowed_function_attributes, base, "Function attribute")
+    out += _unlisted(
+        props, catalogue.allowed_function_properties, base + ".Properties", "Function property",
+    )
+    trigger = spec.get("trigger") if isinstance(spec.get("trigger"), dict) else {}
+    ttype = trigger.get("type")
+    expected_type = TRIGGER_EVENT_TYPES.get(ttype) if isinstance(ttype, str) else None
+    events = props.get("Events")
+    if expected_type is None or not isinstance(events, dict) or len(events) != 1:
+        return out
+    (event_name, event), = events.items()
+    if not isinstance(event, dict) or event.get("Type") != expected_type:
+        return out
+    loc = f"{base}.Properties.Events.{event_name}"
+    out += _unlisted(event, ("Type", "Properties"), loc, "Event key")
+    eprops = event.get("Properties")
+    if isinstance(eprops, dict):
+        out += _unlisted(
+            eprops, catalogue.allowed_event_properties.get(expected_type, frozenset()),
+            loc + ".Properties", f"{expected_type} property",
+        )
+    return out
+
+
 def check_template(spec: dict, template: dict, catalogue: Catalogue) -> list[Violation]:
     out = _check_resources(template, catalogue)
     function = get_function(template)
@@ -132,4 +168,5 @@ def check_template(spec: dict, template: dict, catalogue: Catalogue) -> list[Vio
         name, props = function
         out += _check_settings(spec, name, props)
         out += _check_trigger(spec, name, props, catalogue)
+        out += _check_allow_lists(spec, name, _resources(template)[name], props, catalogue)
     return out

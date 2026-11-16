@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[2]
 STANDARD = ROOT / "standards" / "secure-lambda-standard.md"
 
 EXPECTED_IDS = {
-    "LFG-TPL-001", "LFG-TPL-002", "LFG-NAME-001", "LFG-SPEC-001", "LFG-SPEC-002",
+    "LFG-TPL-001", "LFG-TPL-002", "LFG-TPL-003", "LFG-NAME-001", "LFG-SPEC-001", "LFG-SPEC-002",
     "LFG-TRG-001", "LFG-RA-001", "LFG-IAM-001", "LFG-IAM-002", "LFG-IAM-003",
     "LFG-IAM-004", "LFG-IAM-005", "LFG-IAM-006", "LFG-IAM-007", "LFG-IAM-008",
     "LFG-SEC-001", "LFG-SEC-002", "LFG-RUN-001", "LFG-RUN-002", "LFG-LOG-001",
@@ -22,7 +22,7 @@ def test_catalogue_has_exactly_the_expected_rules():
     catalogue = load_catalogue()
     assert isinstance(catalogue, Catalogue)
     assert set(catalogue.rules) == EXPECTED_IDS
-    assert len(catalogue.rules) == 26
+    assert len(catalogue.rules) == 27
 
 
 def test_every_rule_is_well_formed():
@@ -49,6 +49,18 @@ def test_enabled_triggers_and_resource_types():
     assert catalogue.allowed_resource_types == frozenset(
         {"AWS::Serverless::Function", "AWS::Logs::LogGroup", "AWS::SQS::Queue", "AWS::SNS::Topic"}
     )
+
+
+def test_property_allow_lists_are_loaded():
+    catalogue = load_catalogue()
+    assert catalogue.allowed_function_attributes == frozenset(
+        {"Type", "Properties", "Metadata", "DependsOn"}
+    )
+    assert "Policies" in catalogue.allowed_function_properties
+    assert "AssumeRolePolicyDocument" not in catalogue.allowed_function_properties
+    assert set(catalogue.allowed_event_properties) == {"ScheduleV2", "EventBridgeRule"}
+    assert "Pattern" in catalogue.allowed_event_properties["EventBridgeRule"]
+    assert isinstance(catalogue.allowed_event_properties["ScheduleV2"], frozenset)
 
 
 def test_lists_and_patterns_are_loaded():

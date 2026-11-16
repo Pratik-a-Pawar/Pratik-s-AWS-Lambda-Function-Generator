@@ -86,6 +86,31 @@ Globals:
 
 **CWE:** CWE-1188.
 
+### LFG-TPL-003
+
+**Rule:** Only allow-listed function attributes, function properties and event properties may appear.
+
+**Why it matters:** AWS SAM can create or attach permissions through many properties that never mention IAM, for example `AssumeRolePolicyDocument`, `DeploymentPreference`, `Connectors`, `RolePath` or `Layers`. A checker that looks only for the dangerous properties it knows about is out of date the day SAM adds a feature. So the checker works the other way round: the catalogue lists every key the function resource, its `Properties` and its trigger event may have, and anything else is refused until a person has reviewed it and added it to the list. `Role` and `RoleArn` are on the lists only so that LFG-IAM-004 can report them with the right explanation.
+
+Compliant:
+
+```yaml
+Properties:
+  Timeout: 30
+  Policies:
+    - Statement: []
+```
+
+Non-compliant:
+
+```yaml
+Properties:
+  Timeout: 30
+  AssumeRolePolicyDocument: {}
+```
+
+**CWE:** CWE-1188.
+
 ### LFG-NAME-001
 
 **Rule:** `FunctionName` is `lfg-${Stage}-<spec name>`.
@@ -188,9 +213,9 @@ Non-compliant: the same entry with `rule_id: LFG-IAM-001` (a `deny` rule) or wit
 
 ### LFG-IAM-001
 
-**Rule:** No statement allows the action `*`.
+**Rule:** No statement allows every action: not `*`, not any action made only of `*` and `?`, and not an action whose service part contains a wildcard (`*:*`, `i?m:PassRole`).
 
-**Why it matters:** The action `*` means every API call in AWS. If the function is compromised, for example through a flaw in its code or a malicious dependency, the attacker inherits whatever the function may do. With `*` that is everything the resource list reaches, including deleting data or creating new access for themselves.
+**Why it matters:** The action `*` means every API call in AWS, and a wildcard in the service part, such as `*:*` or `?am:PassRole`, reaches actions of many services at once. Both are the same risk, so they are reported here and not under the narrower wildcard rule. If the function is compromised, for example through a flaw in its code or a malicious dependency, the attacker inherits whatever the function may do. With `*` that is everything the resource list reaches, including deleting data or creating new access for themselves.
 
 Compliant:
 
@@ -267,31 +292,31 @@ Policies:
 
 ### LFG-IAM-004
 
-**Rule:** Every role SAM creates carries the `lfg-function-boundary` permissions boundary, and no external `Role` is supplied.
+**Rule:** Every role SAM creates carries the `lfg-function-boundary` permissions boundary, written exactly as `!Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/lfg-function-boundary"`, and no external `Role` or schedule `RoleArn` is supplied.
 
-**Why it matters:** A permissions boundary is a ceiling: whatever the role's own policies say, it can never do more than the boundary allows. It protects against mistakes that slip past every other check. Supplying your own `Role` would bypass the boundary, since SAM would then not create or constrain the role.
+**Why it matters:** A permissions boundary is a ceiling: whatever the role's own policies say, it can never do more than the boundary allows. It protects against mistakes that slip past every other check. Supplying your own `Role` (or a `RoleArn` on a schedule) would bypass the boundary, since SAM would then not create or constrain the role. The value must match exactly, in the function and in every schedule event: a name that merely contains the boundary's name, or a conditional that only sometimes yields it, would let a different policy be used.
 
 Compliant:
 
 ```yaml
 Properties:
-  PermissionsBoundary: !Sub "arn:aws:iam::${AWS::AccountId}:policy/lfg-function-boundary"
+  PermissionsBoundary: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/lfg-function-boundary"
 ```
 
 Non-compliant:
 
 ```yaml
 Properties:
-  Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/some-existing-role"
+  Role: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/some-existing-role"
 ```
 
 **CWE:** CWE-269. **OWASP Serverless Top 10:** over-privileged function permissions and roles.
 
 ### LFG-IAM-005
 
-**Rule:** `Resource: "*"` is used only with actions that cannot be scoped to a resource.
+**Rule:** A resource that names everything (`"*"`, `"arn:aws:s3:::*"`, `"arn:aws:logs:*:*:*"`, or an `Fn::Sub` or `Fn::Join` that reads as one) is used only with actions that cannot be scoped to a resource.
 
-**Why it matters:** `Resource: "*"` makes an action apply to every resource of that kind in the account. For most actions, naming the exact resource limits the damage of a mistake or compromise to that one thing. A few actions have no resource to name, so a star is the only option for them; the catalogue lists those. Anything else with a star needs a recorded acceptance.
+**Why it matters:** `Resource: "*"` makes an action apply to every resource of that kind in the account, and so does an ARN whose resource part is only wildcards. The checker reads the text of the resource (substitutions such as `${AWS::AccountId}` count as ordinary text) and treats it as unscoped when nothing specific is left. A `Ref` or `Fn::GetAtt` always names one resource. Only strings, `Ref`, `Fn::GetAtt`, `Fn::Sub` and `Fn::Join` are accepted in a `Resource`; any other form is reported under LFG-IAM-007. For most actions, naming the exact resource limits the damage of a mistake or compromise to that one thing. A few actions have no resource to name, so a star is the only option for them; the catalogue lists those. Anything else with a star needs a recorded acceptance.
 
 Compliant:
 
@@ -318,7 +343,7 @@ Non-compliant:
 
 **Rule:** Actions that change security controls need a recorded acceptance.
 
-**Why it matters:** Some actions let a function change who may do what, or switch off the evidence of what happened: editing IAM policies, passing roles, changing bucket policies, stopping audit trails. A function holding these can be used to give an attacker lasting access or to hide their tracks. They are sometimes necessary, but never casually, so a named person must accept the risk, with an expiry.
+**Why it matters:** IAM treats `?` as any single character, so `iam:Pass?ole` is `iam:PassRole` in disguise; the checker catches wildcard actions that overlap a listed action as well as the exact names. Some actions let a function change who may do what, or switch off the evidence of what happened: editing IAM policies, passing roles, changing bucket policies, stopping audit trails. A function holding these can be used to give an attacker lasting access or to hide their tracks. They are sometimes necessary, but never casually, so a named person must accept the risk, with an expiry.
 
 Compliant: a function that only reads from a queue, or a function using `iam:PassRole` with this in its spec:
 
@@ -336,9 +361,9 @@ Non-compliant: the same `iam:PassRole` statement with no acceptance.
 
 ### LFG-IAM-007
 
-**Rule:** Every statement is `Effect: Allow` with explicit `Action` and `Resource`.
+**Rule:** Every statement is `Effect: Allow` with explicit `Action` and `Resource`, written as `<service>:<name>`, and with no keys other than `Sid`, `Effect`, `Action`, `Resource` and `Condition`.
 
-**Why it matters:** A statement missing `Resource` or `Action`, or using `Deny`, makes the policy hard to reason about and hard to compare with the spec. The checker compares what the template allows with what the spec declares; that comparison only works if every statement says plainly what it allows, on what.
+**Why it matters:** A statement missing `Resource` or `Action`, or using `Deny`, makes the policy hard to reason about and hard to compare with the spec. Keys such as `Principal` have no place in an identity policy, and an action that is not written as `<service>:<name>` cannot be compared with the spec. The checker compares what the template allows with what the spec declares; that comparison only works if every statement says plainly what it allows, on what.
 
 Compliant:
 
@@ -359,7 +384,7 @@ Non-compliant:
 
 ### LFG-IAM-008
 
-**Rule:** A wildcard inside an action name needs a recorded acceptance.
+**Rule:** A wildcard (`*` or `?`) inside an action name needs a recorded acceptance.
 
 **Why it matters:** An action such as `s3:Get*` allows every present and future action that starts with `Get`. AWS adds actions over time, so the permission can quietly grow after the review. Naming each action keeps the permission fixed at what was approved.
 

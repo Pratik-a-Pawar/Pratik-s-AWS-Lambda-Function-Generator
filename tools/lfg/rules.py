@@ -24,6 +24,9 @@ class Catalogue:
     rules: dict[str, Rule]
     enabled_triggers: frozenset[str]
     allowed_resource_types: frozenset[str]
+    allowed_function_attributes: frozenset[str]
+    allowed_function_properties: frozenset[str]
+    allowed_event_properties: dict[str, frozenset[str]]
     wildcard_only_actions: tuple[str, ...]
     sensitive_actions: tuple[str, ...]
     secret_name_pattern: str
@@ -54,6 +57,11 @@ def load_catalogue(path: Path | None = None) -> Catalogue:
         rules=rules,
         enabled_triggers=frozenset(data["enabled_triggers"]),
         allowed_resource_types=frozenset(data["allowed_resource_types"]),
+        allowed_function_attributes=frozenset(data["allowed_function_attributes"]),
+        allowed_function_properties=frozenset(data["allowed_function_properties"]),
+        allowed_event_properties={
+            etype: frozenset(props) for etype, props in data["allowed_event_properties"].items()
+        },
         wildcard_only_actions=tuple(data["wildcard_only_actions"]),
         sensitive_actions=tuple(data["sensitive_actions"]),
         secret_name_pattern=data["secret_name_pattern"],

@@ -1,55 +1,116 @@
 """IAM rules: inline statements only, boundary present, no wildcards or unscoped access."""
 
-import json
+import re
 from fnmatch import fnmatchcase
 
 from lfg.policy import Violation
 from lfg.policy.template_rules import get_function
 from lfg.rules import Catalogue
 
-BOUNDARY_POLICY = "policy/lfg-function-boundary"
+BOUNDARY = {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/lfg-function-boundary"}
 SCHEDULE_EVENT_TYPE = "ScheduleV2"
+STATEMENT_KEYS = ("Sid", "Effect", "Action", "Resource", "Condition")
+
+_ACTION_FORM = re.compile(r"^[A-Za-z0-9-]+:[A-Za-z0-9*?]+$")
+_SUBSTITUTION = re.compile(r"\$\{[^}]*\}")
+_WILDCARDS = "*?"
 
 
 def _is_str_list(value) -> bool:
     return isinstance(value, list) and bool(value) and all(isinstance(v, str) for v in value)
 
 
+def _as_list(value) -> list:
+    return value if isinstance(value, list) else [value]
+
+
+def _has_wildcard(text: str) -> bool:
+    return any(c in text for c in _WILDCARDS)
+
+
+def _literal_prefix(pattern: str) -> str:
+    return re.split(r"[*?]", pattern, maxsplit=1)[0]
+
+
+def _action_class(action: str) -> str:
+    """'any' for an action that means everything, 'bad' for a malformed one, else 'named'."""
+    if all(c in _WILDCARDS for c in action) and action:
+        return "any"
+    if _ACTION_FORM.match(action):
+        return "named"
+    service, colon, _ = action.partition(":")
+    return "any" if colon and _has_wildcard(service) else "bad"
+
+
+def _resource_form(entry) -> bool:
+    """Whether a Resource entry is a string or one of the intrinsics that are allowed."""
+    if isinstance(entry, str):
+        return True
+    if not isinstance(entry, dict) or len(entry) != 1:
+        return False
+    (key, value), = entry.items()
+    if key == "Ref":
+        return isinstance(value, str)
+    if key == "Fn::GetAtt":
+        return True
+    if key == "Fn::Sub":
+        return isinstance(value, str) or (
+            isinstance(value, list) and len(value) == 2
+            and isinstance(value[0], str) and isinstance(value[1], dict)
+        )
+    if key == "Fn::Join":
+        return isinstance(value, list) and len(value) == 2 and isinstance(value[0], str) \
+            and isinstance(value[1], list)
+    return False
+
+
+def _resource_text(entry) -> str | None:
+    """The text a resource entry reads as, or None when it names a specific resource."""
+    if isinstance(entry, str):
+        return entry
+    (key, value), = entry.items()
+    if key == "Fn::Sub":
+        return value if isinstance(value, str) else value[0]
+    if key == "Fn::Join":
+        return value[0].join(e if isinstance(e, str) else "X" for e in value[1])
+    return None
+
+
+def _is_unscoped(entry) -> bool:
+    text = _resource_text(entry)
+    if text is None:
+        return False
+    text = _SUBSTITUTION.sub("X", text)
+    if all(c in "*?/" for c in text):
+        return True
+    if not text.startswith("arn:"):
+        return False
+    parts = text.split(":", 5)
+    if len(parts) < 6:
+        return _has_wildcard(text)
+    return all(c in "*?/:" for c in parts[5])
+
+
 def _statement_problem(statement: dict) -> tuple[str, str] | None:
     """The rule ID and message if the statement is not a plain Allow with Action and Resource."""
     if "NotAction" in statement or "NotResource" in statement:
         return "LFG-IAM-002", "NotAction and NotResource are not allowed"
+    extra = [k for k in statement if k not in STATEMENT_KEYS]
+    if extra:
+        return "LFG-IAM-007", f"Statement keys {extra!r} are not allowed"
     effect = statement.get("Effect")
     if not isinstance(effect, str) or effect != "Allow":
         return "LFG-IAM-007", f"Effect must be 'Allow', not {effect!r}"
     action = statement.get("Action")
     if not isinstance(action, str) and not _is_str_list(action):
         return "LFG-IAM-007", "Action must be a string or a non-empty list of strings"
+    if any(_action_class(a) == "bad" for a in _as_list(action)):
+        return "LFG-IAM-007", "Every action must be written as <service>:<name>"
     resource = statement.get("Resource")
-    if isinstance(resource, list):
-        valid = bool(resource) and all(isinstance(r, (str, dict)) for r in resource)
-    else:
-        valid = isinstance(resource, (str, dict))
-    if not valid:
-        return "LFG-IAM-007", "Resource must be present, as a string, mapping or list of them"
+    entries = resource if isinstance(resource, list) else [resource]
+    if not entries or not all(_resource_form(r) for r in entries):
+        return "LFG-IAM-007", "Resource must be present, as a string, a permitted intrinsic or a list"
     return None
-
-
-def _actions(statement: dict) -> list[str]:
-    action = statement["Action"]
-    return [(action if isinstance(action, str) else a).lower() for a in _as_list(action)]
-
-
-def _as_list(value) -> list:
-    return value if isinstance(value, list) else [value]
-
-
-def _has_star_resource(statement: dict) -> bool:
-    return "*" in [r for r in _as_list(statement["Resource"]) if isinstance(r, str)]
-
-
-def _literal_prefix(pattern: str) -> str:
-    return pattern.split("*", 1)[0]
 
 
 def _is_sensitive(action: str, patterns: tuple[str, ...]) -> bool:
@@ -58,9 +119,9 @@ def _is_sensitive(action: str, patterns: tuple[str, ...]) -> bool:
         pattern = pattern.lower()
         if fnmatchcase(action, pattern):
             return True
-        if "*" in action:
+        if _has_wildcard(action):
             other = _literal_prefix(pattern)
-            if other.startswith(prefix) or prefix.startswith(other):
+            if fnmatchcase(pattern, action) or other.startswith(prefix) or prefix.startswith(other):
                 return True
     return False
 
@@ -106,23 +167,24 @@ def _check_statement(
     if problem:
         return [Violation(problem[0], problem[1], loc)]
     out = []
-    actions = _actions(statement)
-    named = [a for a in actions if a != "*"]
-    if "*" in actions:
-        out.append(Violation("LFG-IAM-001", "A statement allows the action '*'", loc))
+    actions = [a.lower() for a in _as_list(statement["Action"])]
+    named = [a for a in actions if _action_class(a) == "named"]
+    if len(named) < len(actions):
+        out.append(Violation("LFG-IAM-001", "A statement allows every action ('*' or a wildcard service)", loc))
     wildcard_only = tuple(p.lower() for p in catalogue.wildcard_only_actions)
-    if _has_star_resource(statement):
+    resources = _as_list(statement["Resource"])
+    if any(_is_unscoped(r) for r in resources):
         scopable = [a for a in named if not any(fnmatchcase(a, p) for p in wildcard_only)]
         if scopable:
             out.append(Violation(
-                "LFG-IAM-005", f"Resource '*' is used with scopable actions: {', '.join(scopable)}", loc,
+                "LFG-IAM-005", f"A resource names everything for scopable actions: {', '.join(scopable)}", loc,
             ))
     sensitive = [a for a in named if _is_sensitive(a, catalogue.sensitive_actions)]
     if sensitive:
         out.append(Violation(
             "LFG-IAM-006", f"Security-changing actions need an acceptance: {', '.join(sensitive)}", loc,
         ))
-    wildcards = [a for a in named if "*" in a and a not in wildcard_only]
+    wildcards = [a for a in named if _has_wildcard(a) and a not in wildcard_only]
     if wildcards:
         out.append(Violation(
             "LFG-IAM-008", f"Wildcards inside action names need an acceptance: {', '.join(wildcards)}", loc,
@@ -135,30 +197,31 @@ def _check_statement(
     return out
 
 
-def _has_boundary(value) -> bool:
-    return BOUNDARY_POLICY in json.dumps(value, default=str)
-
-
 def _check_boundary(name: str, props: dict) -> list[Violation]:
     base = f"template.yaml:Resources.{name}.Properties"
     out = []
     if "Role" in props:
         out.append(Violation("LFG-IAM-004", "An external Role must not be supplied", f"{base}.Role"))
-    if not _has_boundary(props.get("PermissionsBoundary")):
+    if props.get("PermissionsBoundary") != BOUNDARY:
         out.append(Violation(
-            "LFG-IAM-004", "PermissionsBoundary must be the lfg-function-boundary policy",
+            "LFG-IAM-004", "PermissionsBoundary must be exactly the lfg-function-boundary Fn::Sub",
             f"{base}.PermissionsBoundary",
         ))
     events = props.get("Events")
     for event_name, event in (events.items() if isinstance(events, dict) else ()):
         if not isinstance(event, dict) or event.get("Type") != SCHEDULE_EVENT_TYPE:
             continue
-        eprops = event.get("Properties")
-        boundary = eprops.get("PermissionsBoundary") if isinstance(eprops, dict) else None
-        if not _has_boundary(boundary):
+        eloc = f"{base}.Events.{event_name}.Properties"
+        eprops = event.get("Properties") if isinstance(event.get("Properties"), dict) else {}
+        if "RoleArn" in eprops:
             out.append(Violation(
-                "LFG-IAM-004", "The schedule's role needs the lfg-function-boundary policy",
-                f"{base}.Events.{event_name}.Properties.PermissionsBoundary",
+                "LFG-IAM-004", "An external RoleArn on the schedule bypasses the boundary",
+                f"{eloc}.RoleArn",
+            ))
+        if eprops.get("PermissionsBoundary") != BOUNDARY:
+            out.append(Violation(
+                "LFG-IAM-004", "The schedule's PermissionsBoundary must be exactly the "
+                "lfg-function-boundary Fn::Sub", f"{eloc}.PermissionsBoundary",
             ))
     return out
 

@@ -148,6 +148,38 @@ def _runtime_unhashable(spec, template):
     _props(template)["Runtime"] = {"Ref": "R"}
 
 
+def _function_property(name, value):
+    def mutate(spec, template):
+        _props(template)[name] = value
+
+    return mutate
+
+
+def _function_attribute(spec, template):
+    template["Resources"]["Function"]["Connectors"] = {"C": {}}
+
+
+def _event_property(spec, template):
+    _event(template)["Properties"]["GroupName"] = "g"
+
+
+def _event_key(spec, template):
+    _event(template)["Foo"] = 1
+
+
+def _function_property_int_key(spec, template):
+    _props(template)[5] = "x"
+
+
+def _event_property_int_key(spec, template):
+    _event(template)["Properties"][5] = "x"
+
+
+def _eventbridge_extra_property(spec, template):
+    _eventbridge_matches(spec, template)
+    _event(template)["Properties"]["GroupName"] = "g"
+
+
 MUTATIONS = [
     ("globals_present", _globals, {"LFG-TPL-002"}),
     ("raw_lambda_function", _raw_function, {"LFG-TPL-001"}),
@@ -183,6 +215,18 @@ MUTATIONS = [
         {"LFG-IAM-004", "LFG-NAME-001", "LFG-RUN-001", "LFG-SPEC-002"},
     ),
     ("runtime_unhashable", _runtime_unhashable, {"LFG-RUN-001", "LFG-SPEC-002"}),
+    ("fn_assume_role_policy_document", _function_property("AssumeRolePolicyDocument", {}), {"LFG-TPL-003"}),
+    ("fn_deployment_preference", _function_property("DeploymentPreference", {}), {"LFG-TPL-003"}),
+    ("fn_auto_publish_alias", _function_property("AutoPublishAlias", "live"), {"LFG-TPL-003"}),
+    ("fn_role_path", _function_property("RolePath", "/x/"), {"LFG-TPL-003"}),
+    ("fn_layers", _function_property("Layers", ["arn:aws:lambda:x"]), {"LFG-TPL-003"}),
+    ("fn_vpc_config", _function_property("VpcConfig", {}), {"LFG-TPL-003"}),
+    ("fn_attribute_connectors", _function_attribute, {"LFG-TPL-003"}),
+    ("event_property_group_name", _event_property, {"LFG-TPL-003"}),
+    ("event_level_key", _event_key, {"LFG-TPL-003"}),
+    ("eventbridge_event_property", _eventbridge_extra_property, {"LFG-TPL-003"}),
+    ("fn_property_key_not_a_string", _function_property_int_key, {"LFG-TPL-003"}),
+    ("event_property_key_not_a_string", _event_property_int_key, {"LFG-TPL-003"}),
 ]
 
 
