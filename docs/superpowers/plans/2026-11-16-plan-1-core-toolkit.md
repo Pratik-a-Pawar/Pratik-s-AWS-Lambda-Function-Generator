@@ -49,6 +49,41 @@ Inputs the design implies but does not spell out, most likely to bite first. Eac
 4. **Risk acceptances at the edges.** Expired, expiring today, naming an unknown rule, naming a rule that can never be accepted. Expected: valid through the expiry date inclusive; the other three are violations themselves. (Task 3)
 5. **Unreadable input.** Missing files, invalid YAML, a YAML document that is a list, a template using short-form intrinsic tags such as `!Sub` and `!GetAtt`. Expected: intrinsic tags load; everything else exits `2` with a one-line message and no traceback. (Tasks 1 and 3)
 
+## Amendments made during the build
+
+The per-task reviews demonstrated ways past several rules as this plan first worded them. Each was ruled on during the build and the code follows the rulings below. Where a task's text further down disagrees with this section, this section and `standards/rules.yaml` are correct.
+
+**Catalogue.** 28 rules, not 26. Two were added:
+
+| ID | Class | Severity | CWE | Summary |
+|---|---|---|---|---|
+| LFG-TPL-003 | deny | high | CWE-1188 | Only allow-listed function attributes, function properties and event properties may appear |
+| LFG-TPL-004 | deny | critical | CWE-829 | Only allow-listed top-level sections may appear, the only transform is `AWS::Serverless-2016-10-31`, and `Parameters` is exactly the `Stage` parameter limited to `dev` and `prod` |
+
+**Loaders (Tasks 1 and 3).**
+- Both YAML loaders reject duplicate mapping keys, through a shared loader in `tools/lfg/yaml_util.py`.
+- `load_spec` converts YAML dates to ISO strings, so an unquoted `expires` date works.
+- Unreadable, undecodable, impossibly dated or too deeply nested files raise the load errors and the commands exit `2`.
+
+**Risk acceptances (Task 3).** An `expires` that is not a real date, a `risk_acceptances` value that is not a list, and an entry that is not a mapping are each `LFG-RA-001`.
+
+**IAM rules (Task 4).**
+- `?` is a wildcard wherever `*` is.
+- An action must have the form `service:name`. A wildcard in the service part, or an action made only of wildcards, is `LFG-IAM-001`. Any other malformed action string is `LFG-IAM-007`.
+- A statement key other than `Sid`, `Effect`, `Action`, `Resource` or `Condition` is `LFG-IAM-007`.
+- Resource forms are a closed list: a plain string; a `Ref` or `Fn::GetAtt` to a resource in the same template; or a string-form `Fn::Sub` whose variables are `AWS::Partition`, `AWS::Region`, `AWS::AccountId`, `Stage` or a resource in the template. `Fn::Join`, the `Fn::Sub` list form and every other intrinsic are `LFG-IAM-007`.
+- `LFG-IAM-005` fires on any resource whose resource part is entirely wildcards (for example `arn:aws:s3:::*`), not only on the literal `"*"`.
+- The permissions boundary must equal exactly `{"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/lfg-function-boundary"}`. This replaces the substring test this plan specified.
+- A `RoleArn` on a ScheduleV2 event is `LFG-IAM-004`.
+
+**Configuration rules and the command (Task 5).**
+- A dead-letter queue or failure destination must be an SQS queue (`Fn::GetAtt <id>.Arn`) or an SNS topic (`Ref`) declared in the same template, of the type the spec's `failure_destination` names, with no extra keys. `OnSuccess` is refused.
+- `Environment` may contain only `Variables`.
+- A requirement line may carry only `--hash=sha256:` options with exactly 64 hex characters, one `==` pin without wildcards, and no `@` reference.
+- `lfg policy-check` loads every input and checks that `src/` exists before validating; with `--format json` it always prints JSON, including for a schema-invalid spec (`spec_errors`).
+
+**Known limits, stated in the standard.** The checker cannot judge whether a scoped ARN is narrow enough; `LFG-SEC-001` judges variable names, not values; SAM adds send permissions for failure destinations that are not compared with the spec.
+
 ---
 
 ## File Structure

@@ -148,6 +148,8 @@ Policy is **hard deny-list plus recorded risk acceptance (Pratik)**. Representat
 | Always required | Log retention set; a failure destination or dead-letter queue for async triggers; pinned dependencies with hashes; structured logging without event payload dumps; input validation of the event |
 | Allowed only with a risk acceptance | An HTTP endpoint without gateway-level authentication; write actions that change other resources (auto-remediation); `Resource: "*"` on actions that support resource-level permissions; timeout above 60 seconds; internet egress from a VPC |
 
+Two principles were added while building the checker, after review showed that rules written as deny-lists could be bypassed. First, where the template language is open-ended the checker uses an allow-list: function and event properties, top-level sections, transforms, template parameters and the forms a `Resource` may take are each a closed list, and anything else is refused. Second, the checker states its limits: it cannot judge whether a scoped ARN is narrow enough, and it judges secret-looking names, not values. Those remain the reviewers' job. The catalogue has 28 rules; `standards/rules.yaml` is the authoritative list.
+
 Enforcement is deterministic. `lfg policy-check` reads the spec and the SAM template and fails on violations. It runs as a Claude Code hook after generation and again in CI, so the guardrail holds even if the generator's prompt is ignored or bypassed.
 
 ### 5.3 The generator
