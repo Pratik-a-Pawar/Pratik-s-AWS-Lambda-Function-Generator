@@ -4,7 +4,7 @@ import re
 from fnmatch import fnmatchcase
 
 from lfg.policy import Violation
-from lfg.policy.template_rules import get_function
+from lfg.policy.template_rules import get_function, is_resource_reference
 from lfg.rules import Catalogue
 
 BOUNDARY = {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/lfg-function-boundary"}
@@ -44,10 +44,6 @@ def _action_class(action: str) -> str:
     return "any" if colon and _has_wildcard(service) else "bad"
 
 
-def _is_id(value, ids: frozenset[str]) -> bool:
-    return isinstance(value, str) and value in ids
-
-
 def _sub_variable_ok(variable: str, ids: frozenset[str]) -> bool:
     if variable in PSEUDO_PARAMETERS or variable == "Stage":
         return True
@@ -62,16 +58,8 @@ def _resource_form(entry, ids: frozenset[str]) -> bool:
     if not isinstance(entry, dict) or len(entry) != 1:
         return False
     (key, value), = entry.items()
-    if key == "Ref":
-        return _is_id(value, ids)
-    if key == "Fn::GetAtt":
-        if isinstance(value, str):
-            name, dot, attribute = value.partition(".")
-            return name in ids and bool(dot) and bool(attribute)
-        return (
-            isinstance(value, list) and len(value) == 2 and _is_id(value[0], ids)
-            and isinstance(value[1], str) and bool(value[1])
-        )
+    if key in ("Ref", "Fn::GetAtt"):
+        return is_resource_reference(entry, ids)
     if key == "Fn::Sub":
         return (
             isinstance(value, str) and not _WHITESPACE.search(value)

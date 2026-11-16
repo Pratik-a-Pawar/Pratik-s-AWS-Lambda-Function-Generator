@@ -214,6 +214,31 @@ def _macro_in_list(spec, template):
     template["Resources"]["LogGroup"]["Properties"]["Tags"] = [{"Fn::Transform": {"Name": "Evil"}}]
 
 
+def _del_parameters(spec, template):
+    del template["Parameters"]
+
+
+def _stage(**changes):
+    def mutate(spec, template):
+        stage = template["Parameters"]["Stage"]
+        for key, value in changes.items():
+            stage[key] = value
+
+    return mutate
+
+
+def _stage_no_allowed_values(spec, template):
+    del template["Parameters"]["Stage"]["AllowedValues"]
+
+
+def _extra_parameter(spec, template):
+    template["Parameters"]["Other"] = {"Type": "String"}
+
+
+def _parameters_not_a_mapping(spec, template):
+    template["Parameters"] = ["Stage"]
+
+
 MUTATIONS = [
     ("globals_present", _globals, {"LFG-TPL-002"}),
     ("raw_lambda_function", _raw_function, {"LFG-TPL-001"}),
@@ -246,7 +271,7 @@ MUTATIONS = [
     (
         "properties_not_a_mapping",
         _properties_not_a_mapping,
-        {"LFG-IAM-004", "LFG-NAME-001", "LFG-RUN-001", "LFG-SPEC-002"},
+        {"LFG-IAM-004", "LFG-LOG-001", "LFG-NAME-001", "LFG-REL-001", "LFG-RUN-001", "LFG-SPEC-002"},
     ),
     ("runtime_unhashable", _runtime_unhashable, {"LFG-RUN-001", "LFG-SPEC-002"}),
     ("fn_assume_role_policy_document", _function_property("AssumeRolePolicyDocument", {}), {"LFG-TPL-003"}),
@@ -271,6 +296,13 @@ MUTATIONS = [
     ("transform_include", _transform("AWS::Include"), {"LFG-TPL-004"}),
     ("top_level_conditions", _top_level("Conditions"), {"LFG-TPL-004"}),
     ("top_level_mappings", _top_level("Mappings"), {"LFG-TPL-004"}),
+    ("parameters_deleted", _del_parameters, {"LFG-TPL-004"}),
+    ("parameters_not_a_mapping", _parameters_not_a_mapping, {"LFG-TPL-004"}),
+    ("stage_no_allowed_values", _stage_no_allowed_values, {"LFG-TPL-004"}),
+    ("stage_allows_star", _stage(AllowedValues=["dev", "prod", "*"]), {"LFG-TPL-004"}),
+    ("stage_with_default", _stage(Default="dev"), {"LFG-TPL-004"}),
+    ("stage_wrong_type", _stage(Type="CommaDelimitedList"), {"LFG-TPL-004"}),
+    ("extra_parameter", _extra_parameter, {"LFG-TPL-004"}),
     ("macro_in_log_group", _macro_in_log_group, {"LFG-TPL-004"}),
     ("macro_in_list", _macro_in_list, {"LFG-TPL-004"}),
     ("macro_under_resources", _macro_under_resources, {"LFG-TPL-001", "LFG-TPL-004"}),
@@ -296,3 +328,18 @@ def test_macro_location_names_the_path(good_dir, good_spec, good_template):
     assert [v.location for v in result] == [
         "template.yaml:Resources.LogGroup.Properties.Tags[0].Fn::Transform"
     ]
+
+
+@pytest.mark.parametrize(
+    ("mutate", "location"),
+    [
+        pytest.param(_del_parameters, "template.yaml:Parameters", id="deleted"),
+        pytest.param(_stage(Default="dev"), "template.yaml:Parameters.Stage", id="stage"),
+        pytest.param(_extra_parameter, "template.yaml:Parameters.Other", id="extra"),
+    ],
+)
+def test_parameter_location(good_dir, good_spec, good_template, mutate, location):
+    template = copy.deepcopy(good_template)
+    mutate(good_spec, template)
+    result = check(good_spec, template, good_dir / "src", date(2026, 11, 16))
+    assert [v.location for v in result] == [location]

@@ -30,6 +30,25 @@ def get_function(template: dict) -> tuple[str, dict] | None:
     return name, props if isinstance(props, dict) else {}
 
 
+def is_resource_reference(entry, ids: frozenset[str]) -> bool:
+    """Whether entry is a Ref or Fn::GetAtt naming a logical ID in the template's Resources."""
+    if not isinstance(entry, dict) or len(entry) != 1:
+        return False
+    (key, value), = entry.items()
+    if key == "Ref":
+        return isinstance(value, str) and value in ids
+    if key == "Fn::GetAtt":
+        if isinstance(value, str):
+            name, dot, attribute = value.partition(".")
+            return name in ids and bool(dot) and bool(attribute)
+        return (
+            isinstance(value, list) and len(value) == 2
+            and isinstance(value[0], str) and value[0] in ids
+            and isinstance(value[1], str) and bool(value[1])
+        )
+    return False
+
+
 def _same(left, right) -> bool:
     return type(left) is type(right) and left == right
 
@@ -58,6 +77,31 @@ def _macros(node, path: str, seen: tuple = ()) -> list[Violation]:
     return out
 
 
+STAGE_PARAMETERS = {"Stage": {"Type": "String", "AllowedValues": ["dev", "prod"]}}
+
+
+def _check_parameters(template: dict) -> list[Violation]:
+    """Parameters must be exactly the pinned Stage, so ${Stage} in an ARN cannot become '*'."""
+    params = template.get("Parameters")
+    if not isinstance(params, dict):
+        return [Violation(
+            "LFG-TPL-004", "Parameters must declare exactly the Stage parameter", _TPL + "Parameters",
+        )]
+    out = []
+    if params.get("Stage") != STAGE_PARAMETERS["Stage"]:
+        out.append(Violation(
+            "LFG-TPL-004",
+            "Stage must be exactly a String parameter with AllowedValues [dev, prod] and no Default",
+            _TPL + "Parameters.Stage",
+        ))
+    out += [
+        Violation("LFG-TPL-004", f"Parameter {name!r} is not allowed", f"{_TPL}Parameters.{name}")
+        for name in params
+        if name != "Stage"
+    ]
+    return out
+
+
 def _check_sections(template: dict, catalogue: Catalogue) -> list[Violation]:
     out = [
         Violation(
@@ -71,7 +115,7 @@ def _check_sections(template: dict, catalogue: Catalogue) -> list[Violation]:
         out.append(Violation(
             "LFG-TPL-004", f"Transform must be exactly {SERVERLESS_TRANSFORM!r}", _TPL + "Transform",
         ))
-    return out + _macros(template, "")
+    return out + _check_parameters(template) + _macros(template, "")
 
 
 def _check_resources(template: dict, catalogue: Catalogue) -> list[Violation]:

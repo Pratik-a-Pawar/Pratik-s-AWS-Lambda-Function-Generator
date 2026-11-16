@@ -115,7 +115,7 @@ Properties:
 
 **Rule:** Only allow-listed top-level sections may appear, and the only transform is `AWS::Serverless-2016-10-31`; `Fn::Transform` is never used.
 
-**Why it matters:** A CloudFormation macro (a `Transform` other than SAM's, or an `Fn::Transform` anywhere in the template) rewrites the template after the checker has read it, so whatever the checker approved is not what is deployed. Sections such as `Conditions`, `Mappings`, `Rules` and `Hooks` can likewise change what a template means at deploy time. The checker therefore accepts only a short list of sections and exactly one transform, written as a single string.
+**Why it matters:** A CloudFormation macro (a `Transform` other than SAM's, or an `Fn::Transform` anywhere in the template) rewrites the template after the checker has read it, so whatever the checker approved is not what is deployed. These templates do not need `Conditions`, `Mappings`, `Rules` or `Hooks`, and each of them widens what a reviewer must read to know what is deployed. The checker therefore accepts only a short list of sections and exactly one transform, written as a single string. The `Parameters` section must be exactly one parameter, `Stage`, of `Type: String` with `AllowedValues: [dev, prod]` and no `Default`, because `${Stage}` is allowed inside resource ARNs and an unconstrained `Stage` could be deployed as `*`.
 
 Compliant:
 
@@ -336,9 +336,9 @@ Properties:
 
 ### LFG-IAM-005
 
-**Rule:** A resource that names everything (`"*"`, `"arn:aws:s3:::*"`, `"arn:aws:logs:*:*:*"`, or an `Fn::Sub` or `Fn::Join` that reads as one) is used only with actions that cannot be scoped to a resource.
+**Rule:** A resource that names everything (`"*"`, `"arn:aws:s3:::*"`, `"arn:aws:logs:*:*:*"`, or an `Fn::Sub` that reads as one) is used only with actions that cannot be scoped to a resource.
 
-**Why it matters:** `Resource: "*"` makes an action apply to every resource of that kind in the account, and so does an ARN whose resource part is only wildcards. The checker reads the text of the resource (substitutions such as `${AWS::AccountId}` count as ordinary text) and treats it as unscoped when nothing specific is left. Only a closed list of forms is accepted in a `Resource`: a plain string without whitespace; a `Ref` or `Fn::GetAtt` to a resource declared in the same template; and a string-form `Fn::Sub` whose variables are `AWS::Partition`, `AWS::Region`, `AWS::AccountId`, `Stage` or such a resource. Everything else is reported under LFG-IAM-007, because a template parameter, a nested intrinsic, `Fn::Join` or the list form of `Fn::Sub` can carry a `*` in at deploy time, after the checker has read the file; only references to resources declared in the same template are certain to name one resource. The checker can tell that a resource is unscoped, but it cannot judge whether a scoped ARN, such as every role in an account, is narrow enough; that judgement belongs to the reviewers. For most actions, naming the exact resource limits the damage of a mistake or compromise to that one thing. A few actions have no resource to name, so a star is the only option for them; the catalogue lists those. Anything else with a star needs a recorded acceptance.
+**Why it matters:** `Resource: "*"` makes an action apply to every resource of that kind in the account, and so does an ARN whose resource part is only wildcards. The checker reads the text of the resource (substitutions such as `${AWS::AccountId}` count as ordinary text) and treats it as unscoped when nothing specific is left. Only a closed list of forms is accepted in a `Resource`: a plain string without whitespace; a `Ref` or `Fn::GetAtt` to a resource declared in the same template; and a string-form `Fn::Sub` whose variables are `AWS::Partition`, `AWS::Region`, `AWS::AccountId`, `Stage` or such a resource. Everything else is reported under LFG-IAM-007, because a template parameter, a nested intrinsic, `Fn::Join` or the list form of `Fn::Sub` can carry a `*` in at deploy time, after the checker has read the file; only references to resources declared in the same template are certain to name one resource. The one parameter-like value allowed is `${Stage}` in an `Fn::Sub`, which is safe because LFG-TPL-004 pins the `Stage` parameter to `dev` or `prod`. The checker can tell that a resource is unscoped, but it cannot judge whether a scoped ARN, such as every role in an account, is narrow enough; that judgement belongs to the reviewers. For most actions, naming the exact resource limits the damage of a mistake or compromise to that one thing. A few actions have no resource to name, so a star is the only option for them; the catalogue lists those. Anything else with a star needs a recorded acceptance.
 
 Compliant:
 
@@ -549,7 +549,7 @@ Non-compliant: no `LogGroup` resource, or one without `RetentionInDays`.
 
 **Rule:** Asynchronous triggers have a failure destination.
 
-**Why it matters:** When a function invoked asynchronously, such as by a schedule or an event, fails after its retries, the event is dropped unless something catches it. The work is lost and nobody is told. A queue or topic as a failure destination keeps the failed event for inspection and replay.
+**Why it matters:** When a function invoked asynchronously, such as by a schedule or an event, fails after its retries, the event is dropped unless something catches it. The work is lost and nobody is told. A queue or topic as a failure destination keeps the failed event for inspection and replay. The destination must be an SQS queue or SNS topic declared in the same template, referred to by `Ref` or `Fn::GetAtt`, because SAM adds send permissions for it to the function's role outside `Policies`, where the spec comparison cannot see them; an external ARN would be an unreviewed outbound channel. `OnSuccess` destinations are not allowed.
 
 Compliant:
 

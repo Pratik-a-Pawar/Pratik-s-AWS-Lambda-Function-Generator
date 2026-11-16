@@ -391,7 +391,7 @@ MUTATIONS = [
     ("res_ref_parameter", _res1({"Ref": "Stage"}), {"LFG-IAM-007"}),
     ("res_ref_pseudo_parameter", _res1({"Ref": "AWS::AccountId"}), {"LFG-IAM-007"}),
     ("res_ref_unknown", _res1({"Ref": "NoSuchResource"}), {"LFG-IAM-007"}),
-    ("res_ref_parameter_default_star", _param_star, {"LFG-IAM-007"}),
+    ("res_ref_parameter_default_star", _param_star, {"LFG-IAM-007", "LFG-TPL-004"}),
     ("res_getatt_star_string", _res1({"Fn::GetAtt": "*"}), {"LFG-IAM-007"}),
     ("res_getatt_unknown", _res1({"Fn::GetAtt": ["NoSuchResource", "Arn"]}), {"LFG-IAM-007"}),
     ("res_getatt_list_not_strings", _res1({"Fn::GetAtt": [["x"], "Arn"]}), {"LFG-IAM-007"}),
