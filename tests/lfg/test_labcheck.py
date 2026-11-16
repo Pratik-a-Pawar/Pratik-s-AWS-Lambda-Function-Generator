@@ -86,8 +86,8 @@ def test_cli_labcheck_without_lab_is_usage_error(capsys):
 
 
 def test_cli_labcheck_empty_lab(capsys):
-    assert main(["labcheck", "00"]) == 0
-    assert "Lab 00 has no checks yet" in capsys.readouterr().out
+    assert main(["labcheck", "02"]) == 0
+    assert "Lab 02 has no checks yet" in capsys.readouterr().out
 
 
 def test_check_collecting_no_tests_returns_1_with_message(tmp_path, capsys):

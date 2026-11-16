@@ -5,13 +5,13 @@ labs:
   "00":
     title: Workstation and account guardrails
     dir: labs/00-workstation
-    owned: []
-    checks: []
+    owned: [labs/00-workstation/answers.md]
+    checks: [labs/checks/test_lab00.py]
   "01":
     title: Threat model the generator
     dir: labs/01-threat-model
-    owned: []
-    checks: []
+    owned: [docs/threat-model.md]
+    checks: [labs/checks/test_lab01.py]
   "02":
     title: Function spec and policy checker
     dir: labs/02-spec-and-policy
