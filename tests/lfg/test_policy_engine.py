@@ -103,3 +103,27 @@ def test_results_are_sorted(good_dir, good_spec, good_template):
     result = _run(good_dir, good_spec, good_template)
     assert len(result) > 2
     assert result == sorted(result, key=lambda v: (v.rule_id, v.location))
+
+
+@pytest.mark.parametrize("value", [5, "LFG-RUN-002", {"rule_id": "LFG-RUN-002"}])
+def test_risk_acceptances_not_a_list(good_dir, good_spec, good_template, value):
+    _long_timeout(good_spec, good_template)
+    good_spec["risk_acceptances"] = value
+    result = _run(good_dir, good_spec, good_template)
+    assert rule_ids(result) == {"LFG-RUN-002", "LFG-RA-001"}
+    assert [v.location for v in result if v.rule_id == "LFG-RA-001"] == [
+        "function.spec.yaml:risk_acceptances"
+    ]
+
+
+def test_risk_acceptance_entry_not_a_mapping(good_dir, good_spec, good_template):
+    good_spec["risk_acceptances"] = ["oops"]
+    result = _run(good_dir, good_spec, good_template)
+    assert [(v.rule_id, v.location) for v in result] == [
+        ("LFG-RA-001", "function.spec.yaml:risk_acceptances[0]")
+    ]
+
+
+def test_risk_acceptance_unhashable_rule_id(good_dir, good_spec, good_template):
+    _accept(good_spec, ["LFG-RUN-002"], "2026-12-31")
+    assert rule_ids(_run(good_dir, good_spec, good_template)) == {"LFG-RA-001"}

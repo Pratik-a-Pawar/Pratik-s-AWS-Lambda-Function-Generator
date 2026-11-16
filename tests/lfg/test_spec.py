@@ -167,3 +167,21 @@ def test_unquoted_date_is_normalised(good_dir):
     spec = load_spec(spec_file)
     assert spec["risk_acceptances"][0]["expires"] == "2027-01-31"
     assert validate_spec(spec) == []
+
+
+def _duplicate_timeout(good_dir):
+    path = good_dir / "function.spec.yaml"
+    path.write_text(path.read_text().replace("timeout: 30\n", "timeout: 30\ntimeout: 300\n"))
+    return path
+
+
+def test_duplicate_key_rejected(good_dir):
+    with pytest.raises(SpecLoadError, match="timeout"):
+        load_spec(_duplicate_timeout(good_dir))
+
+
+def test_nested_duplicate_key_rejected(tmp_path):
+    path = tmp_path / "s.yaml"
+    path.write_text("trigger:\n  type: schedule\n  type: eventbridge\n", encoding="utf-8")
+    with pytest.raises(SpecLoadError, match="type"):
+        load_spec(path)

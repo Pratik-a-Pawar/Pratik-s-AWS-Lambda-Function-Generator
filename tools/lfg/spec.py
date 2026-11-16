@@ -9,6 +9,8 @@ from pathlib import Path
 import yaml
 from jsonschema import Draft202012Validator
 
+from lfg.yaml_util import UniqueKeyLoader
+
 SCHEMA_PATH = Path(__file__).resolve().parents[2] / "schemas" / "function-spec.schema.json"
 
 
@@ -39,7 +41,7 @@ def load_spec(path: Path) -> dict:
     except (OSError, UnicodeDecodeError) as exc:
         raise SpecLoadError(f"cannot read {path}: {getattr(exc, 'strerror', None) or exc}") from exc
     try:
-        data = yaml.safe_load(text)
+        data = yaml.load(text, Loader=UniqueKeyLoader)
     except (yaml.YAMLError, ValueError) as exc:
         raise SpecLoadError(f"{path} is not valid YAML: {exc}") from exc
     if not isinstance(data, dict):

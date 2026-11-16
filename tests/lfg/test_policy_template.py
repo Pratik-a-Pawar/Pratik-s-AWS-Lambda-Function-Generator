@@ -116,6 +116,38 @@ def _eventbridge_matches(spec, template):
     }
 
 
+def _resource_type_list(spec, template):
+    template["Resources"]["X"] = {"Type": ["a"], "Properties": {}}
+
+
+def _resource_type_intrinsic(spec, template):
+    template["Resources"]["X"] = {"Type": {"Ref": "Y"}, "Properties": {}}
+
+
+def _resource_not_a_mapping(spec, template):
+    template["Resources"]["X"] = "oops"
+
+
+def _trigger_type_list(spec, template):
+    spec["trigger"] = {"type": ["schedule"]}
+
+
+def _trigger_type_mapping(spec, template):
+    spec["trigger"] = {"type": {"a": 1}}
+
+
+def _events_not_a_mapping(spec, template):
+    _props(template)["Events"] = ["Daily"]
+
+
+def _properties_not_a_mapping(spec, template):
+    template["Resources"]["Function"]["Properties"] = ["x"]
+
+
+def _runtime_unhashable(spec, template):
+    _props(template)["Runtime"] = {"Ref": "R"}
+
+
 MUTATIONS = [
     ("globals_present", _globals, {"LFG-TPL-002"}),
     ("raw_lambda_function", _raw_function, {"LFG-TPL-001"}),
@@ -139,6 +171,18 @@ MUTATIONS = [
     ("trigger_not_enabled", _trigger_not_enabled, {"LFG-TRG-001"}),
     ("eventbridge_pattern_mismatch", _eventbridge_pattern_mismatch, {"LFG-SPEC-002"}),
     ("eventbridge_pattern_matches", _eventbridge_matches, set()),
+    ("resource_type_not_a_string", _resource_type_list, {"LFG-TPL-001"}),
+    ("resource_type_intrinsic", _resource_type_intrinsic, {"LFG-TPL-001"}),
+    ("resource_not_a_mapping", _resource_not_a_mapping, {"LFG-TPL-001"}),
+    ("trigger_type_list", _trigger_type_list, {"LFG-TRG-001"}),
+    ("trigger_type_mapping", _trigger_type_mapping, {"LFG-TRG-001"}),
+    ("events_not_a_mapping", _events_not_a_mapping, {"LFG-SPEC-002"}),
+    (
+        "properties_not_a_mapping",
+        _properties_not_a_mapping,
+        {"LFG-NAME-001", "LFG-RUN-001", "LFG-SPEC-002"},
+    ),
+    ("runtime_unhashable", _runtime_unhashable, {"LFG-RUN-001", "LFG-SPEC-002"}),
 ]
 
 

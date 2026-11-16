@@ -37,9 +37,16 @@ def _problem(entry, catalogue: Catalogue, today: datetime.date) -> str | None:
 
 
 def apply(violations, spec: dict, catalogue: Catalogue, today: datetime.date) -> list:
-    entries = spec.get("risk_acceptances") or []
+    entries = spec.get("risk_acceptances")
     valid_until: dict[str, str] = {}
     extra = []
+    if entries is None:
+        entries = []
+    elif not isinstance(entries, list):
+        extra.append(Violation(
+            "LFG-RA-001", "risk_acceptances must be a list", "function.spec.yaml:risk_acceptances"
+        ))
+        entries = []
     for index, entry in enumerate(entries):
         problem = _problem(entry, catalogue, today)
         if problem:

@@ -4,12 +4,14 @@ from pathlib import Path
 
 import yaml
 
+from lfg.yaml_util import UniqueKeyLoader
+
 
 class TemplateLoadError(Exception):
     """The template file is missing, is not valid YAML, or is not a mapping."""
 
 
-class _CfnLoader(yaml.SafeLoader):
+class _CfnLoader(UniqueKeyLoader):
     pass
 
 

@@ -39,3 +39,10 @@ def test_bad_content_raises(tmp_path, content):
 def test_missing_file_raises(tmp_path):
     with pytest.raises(TemplateLoadError):
         load_template(tmp_path / "absent.yaml")
+
+
+def test_duplicate_key_rejected(good_dir):
+    path = good_dir / "template.yaml"
+    path.write_text(path.read_text().replace("Timeout: 30\n", "Timeout: 30\n      Timeout: 300\n"))
+    with pytest.raises(TemplateLoadError, match="Timeout"):
+        load_template(path)

@@ -41,3 +41,12 @@ def test_binary_spec_exits_2(good_dir, capsys):
     (good_dir / "function.spec.yaml").write_bytes(b"\xff\xfe\x00\x80\x81")
     assert main(["validate-spec", str(good_dir)]) == 2
     assert "Traceback" not in capsys.readouterr().err
+
+
+def test_duplicate_key_is_unusable_input(good_dir, capsys):
+    spec_file = good_dir / "function.spec.yaml"
+    spec_file.write_text(spec_file.read_text().replace("timeout: 30\n", "timeout: 30\ntimeout: 300\n"))
+    assert main(["validate-spec", str(good_dir)]) == 2
+    err = capsys.readouterr().err
+    assert "timeout" in err
+    assert "Traceback" not in err

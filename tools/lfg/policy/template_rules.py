@@ -40,7 +40,7 @@ def _check_resources(template: dict, catalogue: Catalogue) -> list[Violation]:
         out.append(Violation("LFG-TPL-002", "A Globals section is not allowed", _TPL + "Globals"))
     for name, res in _resources(template).items():
         rtype = res.get("Type") if isinstance(res, dict) else None
-        if rtype not in catalogue.allowed_resource_types:
+        if not isinstance(rtype, str) or rtype not in catalogue.allowed_resource_types:
             out.append(Violation(
                 "LFG-TPL-001", f"Resource type {rtype!r} is not on the allow-list",
                 f"{_TPL}Resources.{name}.Type",
@@ -90,7 +90,7 @@ def _check_settings(spec: dict, name: str, props: dict) -> list[Violation]:
 def _check_trigger(spec: dict, name: str, props: dict, catalogue: Catalogue) -> list[Violation]:
     trigger = spec.get("trigger") if isinstance(spec.get("trigger"), dict) else {}
     ttype = trigger.get("type")
-    if ttype not in catalogue.enabled_triggers:
+    if not isinstance(ttype, str) or ttype not in catalogue.enabled_triggers:
         return [Violation(
             "LFG-TRG-001", f"Trigger type {ttype!r} is not enabled", _SPEC + "trigger.type",
         )]
