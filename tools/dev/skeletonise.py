@@ -15,7 +15,6 @@ def _inside(path: Path, root: Path) -> bool:
     return path.resolve().is_relative_to(root)
 
 
-
 def _plan(root: Path) -> tuple[list[tuple[Path, Path]], list[Path]]:
     """Check every lab and return (copies, skeleton directories), changing nothing."""
     resolved_root = root.resolve()
