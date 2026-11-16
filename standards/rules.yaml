@@ -1,0 +1,242 @@
+# Machine-readable catalogue for the secure Lambda standard.
+# Every rule here has a matching "### <ID>" section in secure-lambda-standard.md.
+# Rule IDs are never reused or renumbered.
+
+enabled_triggers:
+  - schedule
+  - eventbridge
+
+allowed_resource_types:
+  - AWS::Serverless::Function
+  - AWS::Logs::LogGroup
+  - AWS::SQS::Queue
+  - AWS::SNS::Topic
+
+# Actions that cannot be scoped to a resource, so "Resource: *" is accepted for them.
+# Each entry must be confirmed against the AWS Service Authorization Reference;
+# Lab 02 asks Pratik to do so.
+wildcard_only_actions:
+  - "ec2:Describe*"
+  - "iam:GenerateCredentialReport"
+  - "iam:GetCredentialReport"
+  - "iam:ListUsers"
+  - "xray:PutTraceSegments"
+  - "xray:PutTelemetryRecords"
+
+# Actions that change security controls and need a recorded acceptance.
+sensitive_actions:
+  - "iam:Attach*"
+  - "iam:Create*"
+  - "iam:Delete*"
+  - "iam:Detach*"
+  - "iam:Put*"
+  - "iam:Update*"
+  - "iam:PassRole"
+  - "ec2:AuthorizeSecurityGroup*"
+  - "ec2:RevokeSecurityGroup*"
+  - "ec2:ModifySecurityGroupRules"
+  - "s3:PutBucketPolicy"
+  - "s3:DeleteBucketPolicy"
+  - "s3:PutBucketAcl"
+  - "s3:PutBucketPublicAccessBlock"
+  - "kms:ScheduleKeyDeletion"
+  - "kms:PutKeyPolicy"
+  - "kms:DisableKey"
+  - "lambda:AddPermission"
+  - "lambda:UpdateFunctionCode"
+  - "lambda:UpdateFunctionConfiguration"
+  - "cloudtrail:StopLogging"
+  - "cloudtrail:DeleteTrail"
+  - "guardduty:Delete*"
+
+secret_name_pattern: '(?i)(password|passwd|secret|token|api_?key|private_?key|credential)'
+
+secret_name_safe_suffixes:
+  - _ARN
+  - _NAME
+  - _PARAM
+  - _ID
+
+rules:
+  - id: LFG-TPL-001
+    title: Allow-listed resource types only
+    class: deny
+    severity: high
+    cwe: CWE-1188
+    enforced_by: policy-check
+    summary: "Only resource types on the allow-list may appear, with exactly one `AWS::Serverless::Function`"
+  - id: LFG-TPL-002
+    title: No Globals section
+    class: deny
+    severity: high
+    cwe: CWE-1188
+    enforced_by: policy-check
+    summary: "A `Globals` section is not allowed"
+  - id: LFG-NAME-001
+    title: Function naming convention
+    class: require
+    severity: medium
+    cwe: null
+    enforced_by: policy-check
+    summary: "`FunctionName` is `lfg-${Stage}-<spec name>`"
+  - id: LFG-SPEC-001
+    title: IAM actions declared in the spec
+    class: deny
+    severity: high
+    cwe: CWE-269
+    enforced_by: policy-check
+    summary: "Every IAM action in the template is declared in the spec"
+  - id: LFG-SPEC-002
+    title: Template matches the spec
+    class: deny
+    severity: medium
+    cwe: null
+    enforced_by: policy-check
+    summary: "Runtime, architecture, timeout, memory and trigger in the template match the spec"
+  - id: LFG-TRG-001
+    title: Trigger type enabled
+    class: deny
+    severity: medium
+    cwe: null
+    enforced_by: policy-check
+    summary: "The trigger type is enabled in this release"
+  - id: LFG-RA-001
+    title: Valid risk acceptance
+    class: deny
+    severity: high
+    cwe: null
+    enforced_by: policy-check
+    summary: "A risk acceptance names a known rule of class `accept` and has not expired"
+  - id: LFG-IAM-001
+    title: No wildcard action
+    class: deny
+    severity: critical
+    cwe: CWE-732
+    enforced_by: policy-check
+    summary: "No statement allows the action `*`"
+  - id: LFG-IAM-002
+    title: No NotAction or NotResource
+    class: deny
+    severity: critical
+    cwe: CWE-732
+    enforced_by: policy-check
+    summary: "No `NotAction` or `NotResource`"
+  - id: LFG-IAM-003
+    title: Inline statements only
+    class: deny
+    severity: high
+    cwe: CWE-269
+    enforced_by: policy-check
+    summary: "Permissions are inline statements only: no managed policies, no SAM policy templates"
+  - id: LFG-IAM-004
+    title: Permissions boundary
+    class: deny
+    severity: critical
+    cwe: CWE-269
+    enforced_by: policy-check
+    summary: "Every role SAM creates carries the `lfg-function-boundary` permissions boundary, and no external `Role` is supplied"
+  - id: LFG-IAM-005
+    title: Resource star only where unavoidable
+    class: accept
+    severity: high
+    cwe: CWE-732
+    enforced_by: policy-check
+    summary: "`Resource: \"*\"` is used only with actions that cannot be scoped"
+  - id: LFG-IAM-006
+    title: Security-control actions
+    class: accept
+    severity: high
+    cwe: CWE-269
+    enforced_by: policy-check
+    summary: "Actions that change security controls need a recorded acceptance"
+  - id: LFG-IAM-007
+    title: Explicit allow statements
+    class: deny
+    severity: high
+    cwe: CWE-732
+    enforced_by: policy-check
+    summary: "Every statement is `Effect: Allow` with explicit `Action` and `Resource`"
+  - id: LFG-IAM-008
+    title: Wildcard inside an action name
+    class: accept
+    severity: medium
+    cwe: CWE-732
+    enforced_by: policy-check
+    summary: "A wildcard inside an action name needs a recorded acceptance"
+  - id: LFG-SEC-001
+    title: No secrets in environment variables
+    class: deny
+    severity: critical
+    cwe: CWE-526
+    enforced_by: policy-check
+    summary: "No secret values in environment variables"
+  - id: LFG-SEC-002
+    title: No hard-coded secrets
+    class: deny
+    severity: critical
+    cwe: CWE-798
+    enforced_by: scanner
+    summary: "No hard-coded secrets in source"
+  - id: LFG-RUN-001
+    title: Supported runtime
+    class: deny
+    severity: high
+    cwe: CWE-1104
+    enforced_by: policy-check
+    summary: "The runtime is on the allowed list"
+  - id: LFG-RUN-002
+    title: Long timeout
+    class: accept
+    severity: low
+    cwe: CWE-400
+    enforced_by: policy-check
+    summary: "A timeout above 60 seconds needs a recorded acceptance"
+  - id: LFG-LOG-001
+    title: Declared log group with retention
+    class: require
+    severity: medium
+    cwe: CWE-778
+    enforced_by: policy-check
+    summary: "A log group with the spec's retention is declared and used"
+  - id: LFG-REL-001
+    title: Failure destination
+    class: require
+    severity: medium
+    cwe: CWE-755
+    enforced_by: policy-check
+    summary: "Asynchronous triggers have a failure destination"
+  - id: LFG-DEP-001
+    title: Pinned dependencies
+    class: require
+    severity: high
+    cwe: CWE-1357
+    enforced_by: policy-check
+    summary: "Dependencies are pinned to exact versions with hashes"
+  - id: LFG-NET-001
+    title: Unauthenticated function URL
+    class: accept
+    severity: high
+    cwe: CWE-306
+    enforced_by: policy-check
+    summary: "A function URL without IAM authentication needs a recorded acceptance"
+  - id: LFG-COD-001
+    title: Validate the event
+    class: require
+    severity: high
+    cwe: CWE-20
+    enforced_by: review
+    summary: "The handler validates the event before using it"
+  - id: LFG-COD-002
+    title: Safe logging
+    class: require
+    severity: medium
+    cwe: CWE-532
+    enforced_by: review
+    summary: "Logs do not contain whole events, secrets or personal data"
+  - id: LFG-COD-003
+    title: No dynamic execution
+    class: deny
+    severity: high
+    cwe: CWE-94
+    enforced_by: scanner
+    summary: "No dynamic code execution, shell invocation or unsafe deserialisation"
