@@ -1,0 +1,19 @@
+# Lab manifest. For each lab: where its material lives, which files the learner
+# writes (`owned`; each has a skeleton under <dir>/skeleton/) and which pytest
+# files `lfg labcheck` runs (`checks`).
+labs:
+  "00":
+    title: Workstation and account guardrails
+    dir: labs/00-workstation
+    owned: []
+    checks: []
+  "01":
+    title: Threat model the generator
+    dir: labs/01-threat-model
+    owned: []
+    checks: []
+  "02":
+    title: Function spec and policy checker
+    dir: labs/02-spec-and-policy
+    owned: []
+    checks: []

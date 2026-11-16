@@ -10,6 +10,7 @@ from pathlib import Path
 
 from lfg import __version__
 from lfg.cfn_yaml import TemplateLoadError, load_template
+from lfg.labcheck import ManifestError, load_manifest, run
 from lfg.policy import Violation, blocking, check
 from lfg.spec import SpecLoadError, load_spec, validate_spec
 
@@ -99,6 +100,21 @@ def _policy_check(args: argparse.Namespace) -> int:
     return 1 if count else 0
 
 
+def _labcheck(args: argparse.Namespace) -> int:
+    root = Path(__file__).resolve().parents[2]
+    if args.list:
+        try:
+            labs = load_manifest(root)
+        except ManifestError as exc:
+            return _fail(str(exc))
+        for number, entry in labs.items():
+            print(f"{number}  {entry['title']}")
+        return 0
+    if args.lab is None:
+        return _fail("give a lab number, or --list")
+    return run(args.lab, root)
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="lfg")
     parser.add_argument("--version", action="version", version=f"lfg {__version__}")
@@ -111,6 +127,10 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--today", help="date for expiring acceptances, YYYY-MM-DD (default: today)")
     p.add_argument("--format", choices=("text", "json"), default="text")
     p.set_defaults(func=_policy_check)
+    p = sub.add_parser("labcheck", help="run a lab's acceptance checks")
+    p.add_argument("lab", nargs="?", help="lab number, for example 02")
+    p.add_argument("--list", action="store_true", help="list the labs")
+    p.set_defaults(func=_labcheck)
     return parser
 
 
