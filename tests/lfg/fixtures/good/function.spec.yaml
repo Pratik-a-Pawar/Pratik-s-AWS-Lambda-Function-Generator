@@ -1,0 +1,26 @@
+spec_version: 1
+name: iam-key-age-audit
+purpose: Report IAM access keys older than the allowed age to the security alert topic.
+owner: pratik-a-pawar
+runtime: python3.13
+architecture: arm64
+trigger:
+  type: schedule
+  expression: rate(1 day)
+  timezone: UTC
+permissions:
+  - actions: [iam:GenerateCredentialReport, iam:GetCredentialReport]
+    resources: ["*"]
+    reason: Credential report actions do not support resource-level permissions.
+  - actions: [sns:Publish]
+    resources: [AlertTopic]
+    reason: Publish the findings summary to the alert topic.
+environment:
+  MAX_KEY_AGE_DAYS: "90"
+secrets: []
+timeout: 30
+memory: 256
+failure_destination: sqs
+log_retention_days: 30
+data_classification: internal
+risk_acceptances: []

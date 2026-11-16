@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lfg"
+version = "0.1.0"
+description = "Lambda Function Generator toolkit"
+requires-python = ">=3.12"
+dependencies = ["jsonschema>=4.23", "PyYAML>=6.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[project.scripts]
+lfg = "lfg.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["tools"]
+include = ["lfg*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["aws: needs AWS credentials"]
+
+[tool.ruff]
+line-length = 100
