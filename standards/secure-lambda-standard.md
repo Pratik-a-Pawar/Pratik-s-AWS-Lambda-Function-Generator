@@ -432,7 +432,7 @@ Action: s3:Get*
 
 **Rule:** No secret values in environment variables.
 
-**Why it matters:** Lambda encrypts environment variables at rest, but the value is still exposed in clear text in the template, in the repository history, in console and API output to anyone who can call `lambda:GetFunctionConfiguration`, and in the function's runtime environment. A secret store adds what an environment variable lacks: access control on each secret and an audit trail of who read it. Pass only a reference, such as a parameter name or secret ARN, and let the function fetch the value at run time with permission. Names containing words like `password`, `token` or `secret` are treated as suspect unless they end in `_ARN`, `_NAME`, `_PARAM` or `_ID`.
+**Why it matters:** Lambda encrypts environment variables at rest, but the value is still exposed in clear text in the template, in the repository history, in console and API output to anyone who can call `lambda:GetFunctionConfiguration`, and in the function's runtime environment. A secret store adds what an environment variable lacks: access control on each secret and an audit trail of who read it. Pass only a reference, such as a parameter name or secret ARN, and let the function fetch the value at run time with permission. Names containing words like `password`, `token` or `secret` are treated as suspect unless they end in `_ARN`, `_NAME`, `_PARAM` or `_ID`. `Environment` may hold only `Variables`, and `Variables` must be a plain mapping of names to values. This rule judges names, so a secret stored under an innocent name is not caught by it; secret scanning and the reviewers cover values.
 
 Compliant:
 
@@ -549,7 +549,7 @@ Non-compliant: no `LogGroup` resource, or one without `RetentionInDays`.
 
 **Rule:** Asynchronous triggers have a failure destination.
 
-**Why it matters:** When a function invoked asynchronously, such as by a schedule or an event, fails after its retries, the event is dropped unless something catches it. The work is lost and nobody is told. A queue or topic as a failure destination keeps the failed event for inspection and replay. The destination must be an SQS queue or SNS topic declared in the same template, referred to by `Ref` or `Fn::GetAtt`, because SAM adds send permissions for it to the function's role outside `Policies`, where the spec comparison cannot see them; an external ARN would be an unreviewed outbound channel. `OnSuccess` destinations are not allowed.
+**Why it matters:** When a function invoked asynchronously, such as by a schedule or an event, fails after its retries, the event is dropped unless something catches it. The work is lost and nobody is told. A queue or topic as a failure destination keeps the failed event for inspection and replay. The destination must be an SQS queue or SNS topic declared in the same template, because SAM adds send permissions for it to the function's role outside `Policies`, where the spec comparison cannot see them; an external ARN would be an unreviewed outbound channel. An SQS destination is written `Type: SQS` with `Fn::GetAtt: [<queue>, Arn]`, where `<queue>` is an `AWS::SQS::Queue`; an SNS destination is `Type: SNS` with `Ref: <topic>`, where `<topic>` is an `AWS::SNS::Topic`. The type must agree with the spec's `failure_destination` (`sqs` or `sns`). `DeadLetterQueue` holds only `Type` and `TargetArn`, `OnFailure` only `Type` and `Destination`, `DestinationConfig` only `OnFailure`, and `EventInvokeConfig` only `DestinationConfig`, `MaximumRetryAttempts` and `MaximumEventAgeInSeconds`. `OnSuccess` destinations are not allowed.
 
 Compliant:
 
@@ -571,7 +571,7 @@ Non-compliant: a scheduled function with no `EventInvokeConfig`.
 
 **Rule:** Dependencies are pinned to exact versions with hashes.
 
-**Why it matters:** A loose requirement such as `requests>=2` installs whatever is newest at build time. If an attacker publishes a malicious release, or takes over a package, the next build pulls it into your function. Exact versions with hashes mean the build installs only the files that were reviewed, and refuses anything altered.
+**Why it matters:** A loose requirement such as `requests>=2` installs whatever is newest at build time. If an attacker publishes a malicious release, or takes over a package, the next build pulls it into your function. Exact versions with hashes mean the build installs only the files that were reviewed, and refuses anything altered. Each requirement is one exact `==` pin (no `*`, no `===`, no `@` or URL, no option lines such as `-r`) followed only by environment markers and one or more `--hash=sha256:` options of 64 hex digits.
 
 Compliant `requirements.txt`:
 

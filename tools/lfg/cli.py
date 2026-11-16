@@ -23,7 +23,11 @@ def _validate_spec(args: argparse.Namespace) -> int:
     except SpecLoadError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
-    errors = validate_spec(spec)
+    try:
+        errors = validate_spec(spec)
+    except RecursionError:
+        print("error: spec is nested too deeply to check", file=sys.stderr)
+        return 2
     if errors:
         for error in errors:
             print(f"{error.path}: {error.message}")
@@ -54,26 +58,44 @@ def _policy_check(args: argparse.Namespace) -> int:
     directory = Path(args.function_dir)
     try:
         spec = load_spec(directory / "function.spec.yaml")
-        errors = validate_spec(spec)
-        if errors:
-            for error in errors:
-                print(f"{error.path}: {error.message}")
-            return 1
         template = load_template(directory / "template.yaml")
     except (SpecLoadError, TemplateLoadError) as exc:
         return _fail(str(exc))
-    violations = check(spec, template, directory / "src", today)
+    if not (directory / "src").is_dir():
+        return _fail(f"{directory / 'src'} is not a directory")
+    try:
+        errors = validate_spec(spec)
+    except RecursionError:
+        return _fail("spec is nested too deeply to check")
+    name = spec.get("name") if isinstance(spec.get("name"), str) else None
+    if errors:
+        if args.format == "json":
+            print(json.dumps({
+                "function": name,
+                "spec_errors": [dataclasses.asdict(e) for e in errors],
+                "blocking": 0,
+                "violations": [],
+            }, indent=2))
+        else:
+            for error in errors:
+                print(f"{error.path}: {error.message}")
+        return 1
+    try:
+        violations = check(spec, template, directory / "src", today)
+    except RecursionError:
+        return _fail("template is nested too deeply to check")
     count = len(blocking(violations))
     if args.format == "json":
         print(json.dumps({
-            "function": spec["name"],
+            "function": name,
+            "spec_errors": [],
             "blocking": count,
             "violations": [dataclasses.asdict(v) for v in violations],
         }, indent=2))
     else:
         for violation in violations:
             print(_line(violation))
-        print(f"BLOCKED: {count} violation(s)" if count else f"OK: {spec['name']} (0 violations)")
+        print(f"BLOCKED: {count} violation(s)" if count else f"OK: {name} (0 violations)")
     return 1 if count else 0
 
 

@@ -41,6 +41,8 @@ def load_template(path: Path) -> dict:
         ) from exc
     try:
         data = yaml.load(text, Loader=_CfnLoader)
+    except (RecursionError, MemoryError):
+        raise TemplateLoadError(f"{path} is nested too deeply to read") from None
     except (yaml.YAMLError, ValueError) as exc:
         raise TemplateLoadError(f"{path} is not valid YAML: {exc}") from exc
     if not isinstance(data, dict):

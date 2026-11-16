@@ -42,11 +42,16 @@ def load_spec(path: Path) -> dict:
         raise SpecLoadError(f"cannot read {path}: {getattr(exc, 'strerror', None) or exc}") from exc
     try:
         data = yaml.load(text, Loader=UniqueKeyLoader)
+    except (RecursionError, MemoryError):
+        raise SpecLoadError(f"{path} is nested too deeply to read") from None
     except (yaml.YAMLError, ValueError) as exc:
         raise SpecLoadError(f"{path} is not valid YAML: {exc}") from exc
     if not isinstance(data, dict):
         raise SpecLoadError(f"{path}: top level must be a mapping")
-    return _iso_dates(data)
+    try:
+        return _iso_dates(data)
+    except RecursionError:
+        raise SpecLoadError(f"{path} is nested too deeply to read") from None
 
 
 @lru_cache(maxsize=1)

@@ -107,6 +107,28 @@ def _destination_config(value, keep_dlq=True):
     return mutate
 
 
+def _sns_dlq(spec, template):
+    spec["failure_destination"] = "sns"
+    _props(template)["DeadLetterQueue"] = {"Type": "SNS", "TargetArn": {"Ref": "AlertTopic"}}
+
+
+def _sns_dlq_with(**changes):
+    def mutate(spec, template):
+        _sns_dlq(spec, template)
+        _props(template)["DeadLetterQueue"].update(changes)
+
+    return mutate
+
+
+def _eic_beside_dlq(**keys):
+    def mutate(spec, template):
+        _props(template)["EventInvokeConfig"] = {
+            "DestinationConfig": {"OnFailure": ON_FAILURE}, **keys,
+        }
+
+    return mutate
+
+
 QUEUE_ARN = {"Fn::GetAtt": ["FailureQueue", "Arn"]}
 ON_FAILURE = {"Type": "SQS", "Destination": QUEUE_ARN}
 
@@ -117,6 +139,10 @@ MUTATIONS = [
     ("env_secret_arn", _variables(SLACK_TOKEN_ARN={"Ref": "AlertTopic"}), set()),
     ("env_secret_lower_case", _variables(db_secret="x"), {SEC}),
     ("env_secret_trailing_newline", _variables(**{"DB_PASSWORD_ARN\n": "x"}), {SEC}),
+    ("env_extra_key", lambda s, t: _props(t)["Environment"].update({"Extra": 1}), {SEC}),
+    ("env_variables_ref", _property("Environment", {"Variables": {"Ref": "Stage"}}), {SEC}),
+    ("env_variables_import", _property("Environment", {"Variables": {"Fn::ImportValue": "x"}}), {SEC}),
+    ("env_empty_mapping", _property("Environment", {}), set()),
     ("spec_env_secret_name", _spec_env(API_KEY="abc"), {SEC}),
     ("spec_env_safe_suffix", _spec_env(API_KEY_NAME="abc"), set()),
     ("env_not_a_mapping", _property("Environment", "A=B"), {SEC}),
@@ -147,8 +173,22 @@ MUTATIONS = [
     ("spec_retention_other", _spec("log_retention_days", 14), {LOG}),
     ("no_failure_destination", _del_property("DeadLetterQueue"), {REL}),
     ("on_failure_destination", _on_failure_only(ON_FAILURE), set()),
-    ("dlq_sns", _dlq(Type="SNS", TargetArn={"Ref": "AlertTopic"}), set()),
+    
     ("dlq_getatt_string_form", _dlq(TargetArn={"Fn::GetAtt": "FailureQueue.Arn"}), set()),
+    ("dlq_sns", _sns_dlq, set()),
+    ("dlq_sns_spec_says_sqs", _dlq(Type="SNS", TargetArn={"Ref": "AlertTopic"}), {REL}),
+    ("dlq_target_log_group", _dlq(TargetArn={"Fn::GetAtt": ["LogGroup", "Arn"]}), {REL}),
+    ("dlq_target_function", _dlq(TargetArn={"Fn::GetAtt": ["Function", "Arn"]}), {REL}),
+    ("dlq_sqs_ref_is_a_url", _dlq(TargetArn={"Ref": "FailureQueue"}), {REL}),
+    ("dlq_sns_getatt", _sns_dlq_with(TargetArn={"Fn::GetAtt": ["AlertTopic", "Arn"]}), {REL}),
+    ("dlq_sns_ref_to_queue", _sns_dlq_with(TargetArn={"Ref": "FailureQueue"}), {REL}),
+    ("dlq_type_lower_case", _dlq(Type="sqs"), {REL}),
+    ("spec_sns_with_sqs_dlq", _spec("failure_destination", "sns"), {REL}),
+    ("dlq_extra_key", _dlq(Foo=1), {REL}),
+    ("on_failure_extra_key", _on_failure_only({**ON_FAILURE, "Foo": 1}), {REL}),
+    ("event_invoke_config_extra_key", _eic_beside_dlq(Qualifier="x"), {REL}),
+    ("event_invoke_config_retries", _eic_beside_dlq(MaximumRetryAttempts=1), set()),
+    ("event_invoke_config_age", _eic_beside_dlq(MaximumEventAgeInSeconds=60), set()),
     ("spec_says_none", _spec("failure_destination", "none"), {REL}),
     ("spec_failure_destination_unknown", _spec("failure_destination", "email"), {REL}),
     ("spec_failure_destination_a_list", _spec("failure_destination", ["sqs"]), {REL}),
@@ -218,6 +258,11 @@ def _delete(src):
     (src / "requirements.txt").unlink()
 
 
+def _dangling_symlink(src):
+    (src / "requirements.txt").unlink()
+    (src / "requirements.txt").symlink_to(src / "nowhere.txt")
+
+
 def _directory(src):
     (src / "requirements.txt").unlink()
     (src / "requirements.txt").mkdir()
@@ -231,6 +276,22 @@ DEPENDENCIES = [
     ("deps_pinned_hashed_crlf", _write(f"x==1.0 \\\r\n    --hash=sha256:{HASH}\r\n"), set()),
     ("deps_two_hashes", _write(f"x==1.0 \\\n --hash=sha256:{HASH} \\\n --hash=sha256:{HASH[::-1]}\n"), set()),
     ("deps_pinned_with_comment_line", _write(f"# note\nx==1.0 --hash=sha256:{HASH}\n"), set()),
+    ("deps_two_hash_options", _write(f"x==1.0 --hash=sha256:{HASH} --hash=sha256:{HASH.upper()}"), set()),
+    ("deps_marker", _write(f'x==1.0 ; python_version < "3.14" --hash=sha256:{HASH}'), set()),
+    ("deps_no_binary", _write(f"x==1.0 --hash=sha256:{HASH} --no-binary :all:"), {DEP}),
+    ("deps_global_option", _write(f"x==1.0 --hash=sha256:{HASH} --global-option=x"), {DEP}),
+    ("deps_at_file", _write("x @ file:/tmp/x"), {DEP}),
+    ("deps_at_marker_free", _write(f"x@1.0==1.0 --hash=sha256:{HASH}"), {DEP}),
+    ("deps_star_version", _write(f"x==1.* --hash=sha256:{HASH}"), {DEP}),
+    ("deps_triple_equals", _write(f"x===1.0 --hash=sha256:{HASH}"), {DEP}),
+    ("deps_hash_65", _write(f"x==1.0 --hash=sha256:{HASH}a"), {DEP}),
+    ("deps_hash_63", _write(f"x==1.0 --hash=sha256:{HASH[:-1]}"), {DEP}),
+    ("deps_hash_not_hex", _write(f"x==1.0 --hash=sha256:{'g' * 64}"), {DEP}),
+    ("deps_two_pins", _write(f"x==1.0==2.0 --hash=sha256:{HASH}"), {DEP}),
+    ("deps_junk_after_version", _write(f"x==1.0 junk --hash=sha256:{HASH}"), {DEP}),
+    ("deps_bom_then_include", _write(b"\xef\xbb\xbf-r other.txt\n"), {DEP}),
+    ("deps_bom_then_pinned", _write(b"\xef\xbb\xbfx==1.0 --hash=sha256:" + HASH.encode()), set()),
+    ("deps_dangling_symlink", _dangling_symlink, {DEP}),
     ("deps_unpinned", _write("requests"), {DEP}),
     ("deps_range", _write("requests>=2.0"), {DEP}),
     ("deps_pinned_no_hash", _write("requests==2.32.3"), {DEP}),
