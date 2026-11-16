@@ -11,8 +11,10 @@ BOUNDARY = {"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/lfg-
 SCHEDULE_EVENT_TYPE = "ScheduleV2"
 STATEMENT_KEYS = ("Sid", "Effect", "Action", "Resource", "Condition")
 
-_ACTION_FORM = re.compile(r"^[A-Za-z0-9-]+:[A-Za-z0-9*?]+$")
-_SUBSTITUTION = re.compile(r"\$\{[^}]*\}")
+_ACTION_FORM = re.compile(r"[A-Za-z0-9-]+:[A-Za-z0-9*?]+")
+_SUBSTITUTION = re.compile(r"\$\{([^}]*)\}")
+_WHITESPACE = re.compile(r"\s")
+PSEUDO_PARAMETERS = ("AWS::Partition", "AWS::Region", "AWS::AccountId")
 _WILDCARDS = "*?"
 
 
@@ -36,44 +38,53 @@ def _action_class(action: str) -> str:
     """'any' for an action that means everything, 'bad' for a malformed one, else 'named'."""
     if all(c in _WILDCARDS for c in action) and action:
         return "any"
-    if _ACTION_FORM.match(action):
+    if _ACTION_FORM.fullmatch(action):
         return "named"
     service, colon, _ = action.partition(":")
     return "any" if colon and _has_wildcard(service) else "bad"
 
 
-def _resource_form(entry) -> bool:
-    """Whether a Resource entry is a string or one of the intrinsics that are allowed."""
-    if isinstance(entry, str):
+def _is_id(value, ids: frozenset[str]) -> bool:
+    return isinstance(value, str) and value in ids
+
+
+def _sub_variable_ok(variable: str, ids: frozenset[str]) -> bool:
+    if variable in PSEUDO_PARAMETERS or variable == "Stage":
         return True
+    name, dot, attribute = variable.partition(".")
+    return name in ids and (not dot or bool(attribute))
+
+
+def _resource_form(entry, ids: frozenset[str]) -> bool:
+    """Whether a Resource entry is one of the closed list of permitted forms."""
+    if isinstance(entry, str):
+        return not _WHITESPACE.search(entry)
     if not isinstance(entry, dict) or len(entry) != 1:
         return False
     (key, value), = entry.items()
     if key == "Ref":
-        return isinstance(value, str)
+        return _is_id(value, ids)
     if key == "Fn::GetAtt":
-        return True
-    if key == "Fn::Sub":
-        return isinstance(value, str) or (
-            isinstance(value, list) and len(value) == 2
-            and isinstance(value[0], str) and isinstance(value[1], dict)
+        if isinstance(value, str):
+            name, dot, attribute = value.partition(".")
+            return name in ids and bool(dot) and bool(attribute)
+        return (
+            isinstance(value, list) and len(value) == 2 and _is_id(value[0], ids)
+            and isinstance(value[1], str) and bool(value[1])
         )
-    if key == "Fn::Join":
-        return isinstance(value, list) and len(value) == 2 and isinstance(value[0], str) \
-            and isinstance(value[1], list)
+    if key == "Fn::Sub":
+        return (
+            isinstance(value, str) and not _WHITESPACE.search(value)
+            and all(_sub_variable_ok(v, ids) for v in _SUBSTITUTION.findall(value))
+        )
     return False
 
 
 def _resource_text(entry) -> str | None:
-    """The text a resource entry reads as, or None when it names a specific resource."""
+    """The text a string or Fn::Sub resource reads as, or None for Ref and Fn::GetAtt."""
     if isinstance(entry, str):
         return entry
-    (key, value), = entry.items()
-    if key == "Fn::Sub":
-        return value if isinstance(value, str) else value[0]
-    if key == "Fn::Join":
-        return value[0].join(e if isinstance(e, str) else "X" for e in value[1])
-    return None
+    return entry.get("Fn::Sub")
 
 
 def _is_unscoped(entry) -> bool:
@@ -83,7 +94,7 @@ def _is_unscoped(entry) -> bool:
     text = _SUBSTITUTION.sub("X", text)
     if all(c in "*?/" for c in text):
         return True
-    if not text.startswith("arn:"):
+    if not text.lower().startswith("arn:"):
         return False
     parts = text.split(":", 5)
     if len(parts) < 6:
@@ -91,7 +102,7 @@ def _is_unscoped(entry) -> bool:
     return all(c in "*?/:" for c in parts[5])
 
 
-def _statement_problem(statement: dict) -> tuple[str, str] | None:
+def _statement_problem(statement: dict, ids: frozenset[str]) -> tuple[str, str] | None:
     """The rule ID and message if the statement is not a plain Allow with Action and Resource."""
     if "NotAction" in statement or "NotResource" in statement:
         return "LFG-IAM-002", "NotAction and NotResource are not allowed"
@@ -108,7 +119,7 @@ def _statement_problem(statement: dict) -> tuple[str, str] | None:
         return "LFG-IAM-007", "Every action must be written as <service>:<name>"
     resource = statement.get("Resource")
     entries = resource if isinstance(resource, list) else [resource]
-    if not entries or not all(_resource_form(r) for r in entries):
+    if not entries or not all(_resource_form(r, ids) for r in entries):
         return "LFG-IAM-007", "Resource must be present, as a string, a permitted intrinsic or a list"
     return None
 
@@ -159,9 +170,9 @@ def _statements(policies: list, base: str):
 
 
 def _check_statement(
-    statement, loc: str, declared: set[str], catalogue: Catalogue,
+    statement, loc: str, declared: set[str], ids: frozenset[str], catalogue: Catalogue,
 ) -> list[Violation]:
-    problem = _statement_problem(statement) if isinstance(statement, dict) else (
+    problem = _statement_problem(statement, ids) if isinstance(statement, dict) else (
         "LFG-IAM-007", "A statement must be a mapping",
     )
     if problem:
@@ -241,9 +252,11 @@ def check_iam(spec: dict, template: dict, catalogue: Catalogue) -> list[Violatio
             "LFG-IAM-003", "Policies must be a list of inline statements", f"{base}.Policies",
         )]
     declared = _declared_actions(spec)
+    resources = template.get("Resources")
+    ids = frozenset(k for k in resources if isinstance(k, str)) if isinstance(resources, dict) else frozenset()
     for loc, statement in _statements(policies, base):
         if isinstance(statement, Violation):
             out.append(statement)
         else:
-            out += _check_statement(statement, loc, declared, catalogue)
+            out += _check_statement(statement, loc, declared, ids, catalogue)
     return out

@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[2]
 STANDARD = ROOT / "standards" / "secure-lambda-standard.md"
 
 EXPECTED_IDS = {
-    "LFG-TPL-001", "LFG-TPL-002", "LFG-TPL-003", "LFG-NAME-001", "LFG-SPEC-001", "LFG-SPEC-002",
+    "LFG-TPL-001", "LFG-TPL-002", "LFG-TPL-003", "LFG-TPL-004", "LFG-NAME-001", "LFG-SPEC-001", "LFG-SPEC-002",
     "LFG-TRG-001", "LFG-RA-001", "LFG-IAM-001", "LFG-IAM-002", "LFG-IAM-003",
     "LFG-IAM-004", "LFG-IAM-005", "LFG-IAM-006", "LFG-IAM-007", "LFG-IAM-008",
     "LFG-SEC-001", "LFG-SEC-002", "LFG-RUN-001", "LFG-RUN-002", "LFG-LOG-001",
@@ -22,7 +22,7 @@ def test_catalogue_has_exactly_the_expected_rules():
     catalogue = load_catalogue()
     assert isinstance(catalogue, Catalogue)
     assert set(catalogue.rules) == EXPECTED_IDS
-    assert len(catalogue.rules) == 27
+    assert len(catalogue.rules) == 28
 
 
 def test_every_rule_is_well_formed():
@@ -61,6 +61,13 @@ def test_property_allow_lists_are_loaded():
     assert set(catalogue.allowed_event_properties) == {"ScheduleV2", "EventBridgeRule"}
     assert "Pattern" in catalogue.allowed_event_properties["EventBridgeRule"]
     assert isinstance(catalogue.allowed_event_properties["ScheduleV2"], frozenset)
+
+
+def test_allowed_template_sections_are_loaded():
+    sections = load_catalogue().allowed_template_sections
+    assert isinstance(sections, frozenset)
+    assert {"Transform", "Resources", "Parameters", "Globals"} <= sections
+    assert "Conditions" not in sections
 
 
 def test_lists_and_patterns_are_loaded():

@@ -34,6 +34,46 @@ def _same(left, right) -> bool:
     return type(left) is type(right) and left == right
 
 
+SERVERLESS_TRANSFORM = "AWS::Serverless-2016-10-31"
+MACRO_KEY = "Fn::Transform"
+
+
+def _macros(node, path: str, seen: tuple = ()) -> list[Violation]:
+    """One violation per Fn::Transform key anywhere under node."""
+    if id(node) in seen:
+        return []
+    seen += (id(node),)
+    out = []
+    if isinstance(node, dict):
+        for key, value in node.items():
+            here = f"{path}.{key}" if path else str(key)
+            if key == MACRO_KEY:
+                out.append(Violation(
+                    "LFG-TPL-004", "Fn::Transform (a macro) is not allowed", _TPL + here,
+                ))
+            out += _macros(value, here, seen)
+    elif isinstance(node, list):
+        for index, value in enumerate(node):
+            out += _macros(value, f"{path}[{index}]", seen)
+    return out
+
+
+def _check_sections(template: dict, catalogue: Catalogue) -> list[Violation]:
+    out = [
+        Violation(
+            "LFG-TPL-004", f"Top-level section {key!r} is not on the allow-list", f"{_TPL}{key}",
+        )
+        for key in template
+        if key not in catalogue.allowed_template_sections
+    ]
+    transform = template.get("Transform")
+    if not isinstance(transform, str) or transform != SERVERLESS_TRANSFORM:
+        out.append(Violation(
+            "LFG-TPL-004", f"Transform must be exactly {SERVERLESS_TRANSFORM!r}", _TPL + "Transform",
+        ))
+    return out + _macros(template, "")
+
+
 def _check_resources(template: dict, catalogue: Catalogue) -> list[Violation]:
     out = []
     if "Globals" in template:
@@ -162,7 +202,7 @@ def _check_allow_lists(
 
 
 def check_template(spec: dict, template: dict, catalogue: Catalogue) -> list[Violation]:
-    out = _check_resources(template, catalogue)
+    out = _check_sections(template, catalogue) + _check_resources(template, catalogue)
     function = get_function(template)
     if function is not None:
         name, props = function

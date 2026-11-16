@@ -149,6 +149,11 @@ def _event_property(name, value):
     return mutate
 
 
+def _param_star(spec, template):
+    template["Parameters"]["Star"] = {"Type": "String", "Default": "*"}
+    _statements(template)[1]["Resource"] = {"Ref": "Star"}
+
+
 BOUNDARY = "arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/lfg-function-boundary"
 IAM2 = {"LFG-IAM-006", "LFG-IAM-008"}
 
@@ -311,7 +316,7 @@ MUTATIONS = [
     ("action_empty_name", _stmt0(Action="iam:"), {"LFG-IAM-007"}),
     # R3: resources that mean "everything".
     ("res_sub_star", _res1({"Fn::Sub": "*"}), {"LFG-IAM-005"}),
-    ("res_join_star", _res1({"Fn::Join": ["", ["*"]]}), {"LFG-IAM-005"}),
+    ("res_join_star", _res1({"Fn::Join": ["", ["*"]]}), {"LFG-IAM-007"}),
     ("res_arn_star", _res1("arn:*"), {"LFG-IAM-005"}),
     ("res_star_slash_star", _res1("*/*"), {"LFG-IAM-005"}),
     ("res_s3_all", _res1("arn:aws:s3:::*"), {"LFG-IAM-005"}),
@@ -328,13 +333,8 @@ MUTATIONS = [
         set(),
     ),
     ("res_getatt_scoped", _res1({"Fn::GetAtt": ["AlertTopic", "TopicArn"]}), set()),
-    (
-        "res_join_scoped",
-        _res1({"Fn::Join": [":", ["arn", {"Ref": "AWS::Partition"}, "sns", "eu-west-1",
-                                 {"Ref": "AWS::AccountId"}, "topic-name"]]}),
-        set(),
-    ),
-    ("res_sub_list_form_scoped", _res1({"Fn::Sub": ["arn:aws:sns:::${T}", {"T": "x"}]}), set()),
+    ("res_join_scoped", _res1({"Fn::Join": [":", ["arn", "aws", "sns", "eu-west-1", "x", "topic"]]}), {"LFG-IAM-007"}),
+    ("res_sub_list_form", _res1({"Fn::Sub": ["arn:aws:sns:::${T}", {"T": "x"}]}), {"LFG-IAM-007"}),
     ("res_fn_if", _res1({"Fn::If": ["C", "a", "b"]}), {"LFG-IAM-007"}),
     ("res_ref_extra_key", _res1({"Ref": "A", "Extra": "b"}), {"LFG-IAM-007"}),
     ("res_import_value", _res1({"Fn::ImportValue": "x"}), {"LFG-IAM-007"}),
@@ -380,6 +380,37 @@ MUTATIONS = [
         _stmt0(Sid="Report", Condition={"StringEquals": {"aws:RequestedRegion": "eu-west-1"}}),
         set(),
     ),
+    # F1: anchored patterns must not accept a trailing or leading newline.
+    ("action_trailing_newline", _add("iam:PassRole\n"), {"LFG-IAM-007"}),
+    ("action_star_trailing_newline", _add("iam:*\n"), {"LFG-IAM-007"}),
+    ("action_leading_newline", _add("\niam:PassRole"), {"LFG-IAM-007"}),
+    # F2: resource forms are a closed list.
+    ("res_sub_list_star", _res1({"Fn::Sub": ["${X}", {"X": "*"}]}), {"LFG-IAM-007"}),
+    ("res_sub_list_bucket_star", _res1({"Fn::Sub": ["arn:aws:s3:::${B}", {"B": "*"}]}), {"LFG-IAM-007"}),
+    ("res_join_nested_sub", _res1({"Fn::Join": ["", [{"Fn::Sub": "*"}]]}), {"LFG-IAM-007"}),
+    ("res_ref_parameter", _res1({"Ref": "Stage"}), {"LFG-IAM-007"}),
+    ("res_ref_pseudo_parameter", _res1({"Ref": "AWS::AccountId"}), {"LFG-IAM-007"}),
+    ("res_ref_unknown", _res1({"Ref": "NoSuchResource"}), {"LFG-IAM-007"}),
+    ("res_ref_parameter_default_star", _param_star, {"LFG-IAM-007"}),
+    ("res_getatt_star_string", _res1({"Fn::GetAtt": "*"}), {"LFG-IAM-007"}),
+    ("res_getatt_unknown", _res1({"Fn::GetAtt": ["NoSuchResource", "Arn"]}), {"LFG-IAM-007"}),
+    ("res_getatt_list_not_strings", _res1({"Fn::GetAtt": [["x"], "Arn"]}), {"LFG-IAM-007"}),
+    (
+        "res_sub_unknown_variable",
+        _res1({"Fn::Sub": "arn:${AWS::Partition}:sns:${AWS::Region}:${AWS::AccountId}:${TopicName}"}),
+        {"LFG-IAM-007"},
+    ),
+    ("res_sub_stack_name", _res1({"Fn::Sub": "${AWS::StackName}"}), {"LFG-IAM-007"}),
+    ("res_sub_literal_escape", _res1({"Fn::Sub": "arn:aws:sns:::${!X}"}), {"LFG-IAM-007"}),
+    ("res_string_leading_space", _res1(" *"), {"LFG-IAM-007"}),
+    ("res_string_inner_space", _res1("arn:aws:s3:::my bucket"), {"LFG-IAM-007"}),
+    ("res_sub_with_space", _res1({"Fn::Sub": "arn:aws:s3:::my bucket"}), {"LFG-IAM-007"}),
+    ("res_arn_upper_case", _res1("ARN:*"), {"LFG-IAM-005"}),
+    ("res_ref_resource_ok", _res1({"Ref": "AlertTopic"}), set()),
+    ("res_getatt_list_ok", _res1({"Fn::GetAtt": ["FailureQueue", "Arn"]}), set()),
+    ("res_getatt_string_ok", _res1({"Fn::GetAtt": "FailureQueue.Arn"}), set()),
+    ("res_sub_resource_ok", _res1({"Fn::Sub": "${AlertTopic}"}), set()),
+    ("res_sub_attribute_ok", _res1({"Fn::Sub": "${FailureQueue.Arn}"}), set()),
 ]
 
 

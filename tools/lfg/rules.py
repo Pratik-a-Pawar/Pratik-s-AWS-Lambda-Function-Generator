@@ -24,6 +24,7 @@ class Catalogue:
     rules: dict[str, Rule]
     enabled_triggers: frozenset[str]
     allowed_resource_types: frozenset[str]
+    allowed_template_sections: frozenset[str]
     allowed_function_attributes: frozenset[str]
     allowed_function_properties: frozenset[str]
     allowed_event_properties: dict[str, frozenset[str]]
@@ -57,6 +58,7 @@ def load_catalogue(path: Path | None = None) -> Catalogue:
         rules=rules,
         enabled_triggers=frozenset(data["enabled_triggers"]),
         allowed_resource_types=frozenset(data["allowed_resource_types"]),
+        allowed_template_sections=frozenset(data["allowed_template_sections"]),
         allowed_function_attributes=frozenset(data["allowed_function_attributes"]),
         allowed_function_properties=frozenset(data["allowed_function_properties"]),
         allowed_event_properties={

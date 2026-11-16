@@ -180,6 +180,40 @@ def _eventbridge_extra_property(spec, template):
     _event(template)["Properties"]["GroupName"] = "g"
 
 
+def _transform(value):
+    def mutate(spec, template):
+        template["Transform"] = value
+
+    return mutate
+
+
+def _del_transform(spec, template):
+    del template["Transform"]
+
+
+def _top_level(key):
+    def mutate(spec, template):
+        template[key] = {}
+
+    return mutate
+
+
+def _macro_in_log_group(spec, template):
+    template["Resources"]["LogGroup"]["Properties"]["Fn::Transform"] = {"Name": "Evil"}
+
+
+def _macro_under_resources(spec, template):
+    template["Resources"]["Fn::Transform"] = {"Name": "Evil"}
+
+
+def _macro_in_function(spec, template):
+    _props(template)["Fn::Transform"] = {"Name": "Evil"}
+
+
+def _macro_in_list(spec, template):
+    template["Resources"]["LogGroup"]["Properties"]["Tags"] = [{"Fn::Transform": {"Name": "Evil"}}]
+
+
 MUTATIONS = [
     ("globals_present", _globals, {"LFG-TPL-002"}),
     ("raw_lambda_function", _raw_function, {"LFG-TPL-001"}),
@@ -227,6 +261,20 @@ MUTATIONS = [
     ("eventbridge_event_property", _eventbridge_extra_property, {"LFG-TPL-003"}),
     ("fn_property_key_not_a_string", _function_property_int_key, {"LFG-TPL-003"}),
     ("event_property_key_not_a_string", _event_property_int_key, {"LFG-TPL-003"}),
+    (
+        "transform_with_macro",
+        _transform(["AWS::Serverless-2016-10-31", "Evil"]),
+        {"LFG-TPL-004"},
+    ),
+    ("transform_one_item_list", _transform(["AWS::Serverless-2016-10-31"]), {"LFG-TPL-004"}),
+    ("transform_missing", _del_transform, {"LFG-TPL-004"}),
+    ("transform_include", _transform("AWS::Include"), {"LFG-TPL-004"}),
+    ("top_level_conditions", _top_level("Conditions"), {"LFG-TPL-004"}),
+    ("top_level_mappings", _top_level("Mappings"), {"LFG-TPL-004"}),
+    ("macro_in_log_group", _macro_in_log_group, {"LFG-TPL-004"}),
+    ("macro_in_list", _macro_in_list, {"LFG-TPL-004"}),
+    ("macro_under_resources", _macro_under_resources, {"LFG-TPL-001", "LFG-TPL-004"}),
+    ("macro_in_function", _macro_in_function, {"LFG-TPL-003", "LFG-TPL-004"}),
 ]
 
 
@@ -239,3 +287,12 @@ def test_template_rule(good_dir, good_spec, good_template, mutate, expected):
     mutate(spec, template)
     result = check(spec, template, good_dir / "src", date(2026, 11, 16))
     assert rule_ids(result) == expected
+
+
+def test_macro_location_names_the_path(good_dir, good_spec, good_template):
+    template = copy.deepcopy(good_template)
+    _macro_in_list(good_spec, template)
+    result = check(good_spec, template, good_dir / "src", date(2026, 11, 16))
+    assert [v.location for v in result] == [
+        "template.yaml:Resources.LogGroup.Properties.Tags[0].Fn::Transform"
+    ]

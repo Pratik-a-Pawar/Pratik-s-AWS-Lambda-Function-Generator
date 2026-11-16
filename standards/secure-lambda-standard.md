@@ -90,7 +90,7 @@ Globals:
 
 **Rule:** Only allow-listed function attributes, function properties and event properties may appear.
 
-**Why it matters:** AWS SAM can create or attach permissions through many properties that never mention IAM, for example `AssumeRolePolicyDocument`, `DeploymentPreference`, `Connectors`, `RolePath` or `Layers`. A checker that looks only for the dangerous properties it knows about is out of date the day SAM adds a feature. So the checker works the other way round: the catalogue lists every key the function resource, its `Properties` and its trigger event may have, and anything else is refused until a person has reviewed it and added it to the list. `Role` and `RoleArn` are on the lists only so that LFG-IAM-004 can report them with the right explanation.
+**Why it matters:** Some SAM properties create or change IAM roles (`AssumeRolePolicyDocument`, `DeploymentPreference`), some pull in code the reviewer never sees (`Layers`), and new ones appear with each SAM release. A checker that looks only for the dangerous properties it knows about is out of date the day SAM adds a feature. So the checker works the other way round: the catalogue lists every key the function resource, its `Properties` and its trigger event may have, and anything else is refused until a person has reviewed it and added it to the list. `Role` and `RoleArn` are on the lists only so that LFG-IAM-004 can report them with the right explanation.
 
 Compliant:
 
@@ -110,6 +110,28 @@ Properties:
 ```
 
 **CWE:** CWE-1188.
+
+### LFG-TPL-004
+
+**Rule:** Only allow-listed top-level sections may appear, and the only transform is `AWS::Serverless-2016-10-31`; `Fn::Transform` is never used.
+
+**Why it matters:** A CloudFormation macro (a `Transform` other than SAM's, or an `Fn::Transform` anywhere in the template) rewrites the template after the checker has read it, so whatever the checker approved is not what is deployed. Sections such as `Conditions`, `Mappings`, `Rules` and `Hooks` can likewise change what a template means at deploy time. The checker therefore accepts only a short list of sections and exactly one transform, written as a single string.
+
+Compliant:
+
+```yaml
+Transform: AWS::Serverless-2016-10-31
+```
+
+Non-compliant:
+
+```yaml
+Transform:
+  - AWS::Serverless-2016-10-31
+  - SomeMacro
+```
+
+**CWE:** CWE-829.
 
 ### LFG-NAME-001
 
@@ -215,7 +237,7 @@ Non-compliant: the same entry with `rule_id: LFG-IAM-001` (a `deny` rule) or wit
 
 **Rule:** No statement allows every action: not `*`, not any action made only of `*` and `?`, and not an action whose service part contains a wildcard (`*:*`, `i?m:PassRole`).
 
-**Why it matters:** The action `*` means every API call in AWS, and a wildcard in the service part, such as `*:*` or `?am:PassRole`, reaches actions of many services at once. Both are the same risk, so they are reported here and not under the narrower wildcard rule. If the function is compromised, for example through a flaw in its code or a malicious dependency, the attacker inherits whatever the function may do. With `*` that is everything the resource list reaches, including deleting data or creating new access for themselves.
+**Why it matters:** The action `*` means every API call in AWS, and a wildcard in the service part, such as `*:*` or `?am:PassRole`, may match actions of other services or be rejected by IAM; either way the checker refuses it. These are the same kind of risk, so they are reported here and not under the narrower wildcard rule. If the function is compromised, for example through a flaw in its code or a malicious dependency, the attacker inherits whatever the function may do. With `*` that is everything the resource list reaches, including deleting data or creating new access for themselves.
 
 Compliant:
 
@@ -316,7 +338,7 @@ Properties:
 
 **Rule:** A resource that names everything (`"*"`, `"arn:aws:s3:::*"`, `"arn:aws:logs:*:*:*"`, or an `Fn::Sub` or `Fn::Join` that reads as one) is used only with actions that cannot be scoped to a resource.
 
-**Why it matters:** `Resource: "*"` makes an action apply to every resource of that kind in the account, and so does an ARN whose resource part is only wildcards. The checker reads the text of the resource (substitutions such as `${AWS::AccountId}` count as ordinary text) and treats it as unscoped when nothing specific is left. A `Ref` or `Fn::GetAtt` always names one resource. Only strings, `Ref`, `Fn::GetAtt`, `Fn::Sub` and `Fn::Join` are accepted in a `Resource`; any other form is reported under LFG-IAM-007. For most actions, naming the exact resource limits the damage of a mistake or compromise to that one thing. A few actions have no resource to name, so a star is the only option for them; the catalogue lists those. Anything else with a star needs a recorded acceptance.
+**Why it matters:** `Resource: "*"` makes an action apply to every resource of that kind in the account, and so does an ARN whose resource part is only wildcards. The checker reads the text of the resource (substitutions such as `${AWS::AccountId}` count as ordinary text) and treats it as unscoped when nothing specific is left. Only a closed list of forms is accepted in a `Resource`: a plain string without whitespace; a `Ref` or `Fn::GetAtt` to a resource declared in the same template; and a string-form `Fn::Sub` whose variables are `AWS::Partition`, `AWS::Region`, `AWS::AccountId`, `Stage` or such a resource. Everything else is reported under LFG-IAM-007, because a template parameter, a nested intrinsic, `Fn::Join` or the list form of `Fn::Sub` can carry a `*` in at deploy time, after the checker has read the file; only references to resources declared in the same template are certain to name one resource. The checker can tell that a resource is unscoped, but it cannot judge whether a scoped ARN, such as every role in an account, is narrow enough; that judgement belongs to the reviewers. For most actions, naming the exact resource limits the damage of a mistake or compromise to that one thing. A few actions have no resource to name, so a star is the only option for them; the catalogue lists those. Anything else with a star needs a recorded acceptance.
 
 Compliant:
 

@@ -12,6 +12,17 @@ allowed_resource_types:
   - AWS::SQS::Queue
   - AWS::SNS::Topic
 
+# Only these top-level sections may appear in the template (LFG-TPL-004).
+allowed_template_sections:
+  - AWSTemplateFormatVersion
+  - Transform
+  - Description
+  - Parameters
+  - Resources
+  - Outputs
+  - Metadata
+  - Globals
+
 # Only these keys may appear on the function resource, in its Properties, and in the
 # Properties of its trigger event. SAM can create or attach permissions through many other
 # properties, so the list of what is allowed is the only fail-closed choice (LFG-TPL-003).
@@ -139,6 +150,13 @@ rules:
     cwe: CWE-1188
     enforced_by: policy-check
     summary: "Only allow-listed function attributes, function properties and event properties may appear"
+  - id: LFG-TPL-004
+    title: Allow-listed sections and no macros
+    class: deny
+    severity: critical
+    cwe: CWE-829
+    enforced_by: policy-check
+    summary: "Only allow-listed top-level sections may appear, and the only transform is AWS::Serverless-2016-10-31"
   - id: LFG-NAME-001
     title: Function naming convention
     class: require
