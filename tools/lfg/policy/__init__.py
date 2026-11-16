@@ -17,12 +17,12 @@ class Violation:
 
 
 # Rule modules import Violation from this package, so they load after it is defined.
-from lfg.policy import acceptance, template_rules
+from lfg.policy import acceptance, iam_rules, template_rules
 
 # Rule modules that run whatever the template holds.
 TEMPLATE_MODULES = (template_rules.check_template,)
 # Rule modules that need the single function; skipped when there is not exactly one.
-FUNCTION_MODULES = ()
+FUNCTION_MODULES = (iam_rules.check_iam,)
 
 
 def check(

@@ -180,7 +180,7 @@ MUTATIONS = [
     (
         "properties_not_a_mapping",
         _properties_not_a_mapping,
-        {"LFG-NAME-001", "LFG-RUN-001", "LFG-SPEC-002"},
+        {"LFG-IAM-004", "LFG-NAME-001", "LFG-RUN-001", "LFG-SPEC-002"},
     ),
     ("runtime_unhashable", _runtime_unhashable, {"LFG-RUN-001", "LFG-SPEC-002"}),
 ]
