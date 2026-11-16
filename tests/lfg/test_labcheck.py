@@ -88,3 +88,66 @@ def test_cli_labcheck_without_lab_is_usage_error(capsys):
 def test_cli_labcheck_empty_lab(capsys):
     assert main(["labcheck", "00"]) == 0
     assert "Lab 00 has no checks yet" in capsys.readouterr().out
+
+
+def test_check_collecting_no_tests_returns_1_with_message(tmp_path, capsys):
+    root = make_repo(tmp_path, manifest_for("[checks/test_none.py]"),
+                     {"checks/test_none.py": "VALUE = 1\n"})
+    assert run("01", root) == 1
+    err = capsys.readouterr().err
+    assert err == "error: no tests were collected\n"
+
+
+def test_other_pytest_exit_codes_return_2_with_message(tmp_path, capsys):
+    root = make_repo(tmp_path, manifest_for("[checks/test_broken.py]"),
+                     {"checks/test_broken.py": "import os\nos._exit(4)\n"
+                      "def test_x():\n    pass\n"})
+    assert run("01", root) == 2
+    err = capsys.readouterr().err
+    assert err.startswith("error:") and err.count("\n") == 1
+
+
+def test_check_named_like_an_option_is_refused(tmp_path, capsys):
+    root = make_repo(tmp_path, manifest_for('["-x.py"]'),
+                     {"-x.py": "def test_ok():\n    assert True\n"})
+    assert run("01", root) == 2
+    err = capsys.readouterr().err
+    assert err.startswith("error:") and err.count("\n") == 1
+
+
+def test_check_symlinked_outside_root_is_refused(tmp_path, capsys):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "test_out.py").write_text("def test_ok():\n    assert True\n")
+    (tmp_path / "repo").mkdir()
+    root = make_repo(tmp_path / "repo", manifest_for("[checks/test_out.py]"))
+    (root / "checks").mkdir()
+    (root / "checks" / "test_out.py").symlink_to(outside / "test_out.py")
+    assert run("01", root) == 2
+    err = capsys.readouterr().err
+    assert err.startswith("error:") and err.count("\n") == 1
+
+
+def test_pytest_environment_options_are_not_inherited(tmp_path, monkeypatch):
+    root = make_repo(tmp_path, manifest_for("[checks/test_ok.py]"),
+                     {"checks/test_ok.py": "def test_ok():\n    assert True\n"})
+    monkeypatch.setenv("PYTEST_ADDOPTS", "-k nothing_matches")
+    monkeypatch.setenv("PYTEST_PLUGINS", "no_such_plugin_module")
+    assert run("01", root) == 0
+
+
+@pytest.mark.parametrize("fields", [
+    "dir: ''\n    owned: []",
+    "dir: /abs\n    owned: []",
+    "dir: ../x\n    owned: []",
+    "dir: 5\n    owned: []",
+    "dir: labs/01\n    owned: tools/a.py",
+    "dir: labs/01\n    owned: ['']",
+    "dir: labs/01\n    owned: [../a.py]",
+    "dir: labs/01\n    owned: [/etc/a.py]",
+    "dir: labs/01",
+])
+def test_manifest_dir_and_owned_are_validated(tmp_path, fields):
+    root = make_repo(tmp_path, f'labs:\n  "01":\n    title: One\n    {fields}\n    checks: []\n')
+    with pytest.raises(ManifestError):
+        load_manifest(root)

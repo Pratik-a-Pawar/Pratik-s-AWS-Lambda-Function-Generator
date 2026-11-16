@@ -1,5 +1,6 @@
 """Run a lab's acceptance checks, as listed in labs/manifest.yaml."""
 
+import os
 import subprocess
 import sys
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -11,7 +12,7 @@ from lfg.yaml_util import UniqueKeyLoader
 MANIFEST = Path("labs") / "manifest.yaml"
 
 
-class ManifestError(Exception):
+class ManifestError(ValueError):
     """labs/manifest.yaml is missing or malformed."""
 
 
@@ -19,6 +20,14 @@ def _string_list(entry: dict, key: str, lab: str) -> list[str]:
     value = entry.get(key)
     if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
         raise ManifestError(f"{MANIFEST}: lab {lab!r} needs a list of strings for {key!r}")
+    return value
+
+
+def _relative_path(value: object, lab: str, key: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise ManifestError(f"{MANIFEST}: lab {lab!r} {key!r} needs non-empty strings")
+    if _escapes_root(value):
+        raise ManifestError(f"{MANIFEST}: lab {lab!r} {key!r} path escapes the repository: {value}")
     return value
 
 
@@ -39,6 +48,9 @@ def load_manifest(root: Path) -> dict:
         if not isinstance(entry.get("title"), str):
             raise ManifestError(f"{MANIFEST}: lab {lab!r} needs a string 'title'")
         _string_list(entry, "checks", lab)
+        _relative_path(entry.get("dir"), lab, "dir")
+        for owned in _string_list(entry, "owned", lab):
+            _relative_path(owned, lab, "owned")
     return labs
 
 
@@ -61,10 +73,23 @@ def run(lab: str, root: Path, extra_args: list[str] | None = None) -> int:
     if not checks:
         print(f"Lab {lab} has no checks yet")
         return 0
+    resolved_root = root.resolve()
+    paths = []
     for check in checks:
-        if _escapes_root(check) or not (root / check).is_file():
+        path = (root / check).resolve()
+        if check.startswith("-") or _escapes_root(check) or not path.is_file() \
+                or not path.is_relative_to(resolved_root):
             print(f"error: lab {lab!r} check {check!r} is not a file in the repository",
                   file=sys.stderr)
             return 2
-    command = [sys.executable, "-m", "pytest", *checks, *(extra_args or [])]
-    return subprocess.run(command, cwd=root, check=False).returncode
+        paths.append(str(path))
+    env = {k: v for k, v in os.environ.items() if k not in ("PYTEST_ADDOPTS", "PYTEST_PLUGINS")}
+    command = [sys.executable, "-m", "pytest", *paths, *(extra_args or [])]
+    code = subprocess.run(command, cwd=root, env=env, check=False).returncode
+    if code in (0, 1):
+        return code
+    if code == 5:
+        print("error: no tests were collected", file=sys.stderr)
+        return 1
+    print(f"error: pytest could not run the checks (exit code {code})", file=sys.stderr)
+    return 2
