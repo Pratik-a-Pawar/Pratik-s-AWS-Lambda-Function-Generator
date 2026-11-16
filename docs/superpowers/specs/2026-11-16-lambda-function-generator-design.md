@@ -1,7 +1,7 @@
 # Lambda Function Generator: Design
 
 - **Date:** 2026-11-16
-- **Status:** Draft, awaiting Pratik's approval
+- **Status:** Approved by Pratik on 2026-11-16
 - **Author:** Vanilla (AI coach), from decisions Pratik made in the design conversation
 
 Items marked **(Pratik)** were decided by Pratik. Items marked **(Vanilla's call)** were filled in by the coach and are open to correction. Items marked **(unverified)** could not be checked against a primary source and must be confirmed during the build.
@@ -181,7 +181,7 @@ Generated code uses Powertools for AWS Lambda for structured logging and typed e
 
 **Shared findings format.** Both reviewers must return JSON that validates against `schemas/findings.schema.json`: reviewer, model, commit, and a list of findings with `id`, `rule_id`, `cwe`, `severity`, `confidence`, `file`, `line_start`, `line_end`, `title`, `description`, `evidence`, `recommendation`. The Codex output adds an assessment of every Claude finding (`confirmed`, `disputed` or `needs_context`, with a reason) and a list of findings Claude missed. That assessment is the "review of the review" from the original idea.
 
-**Claude review.** `anthropics/claude-code-action@v1` with a prompt file, a read-only tool allow-list (`Read`, `Glob`, `Grep`), a strict permission mode, a turn cap and `--json-schema`. Model is set by a repository variable, default `claude-opus-5-5` **(Vanilla's call; cost decision is Pratik's, see section 9)**.
+**Claude review.** `anthropics/claude-code-action@v1` with a prompt file, a read-only tool allow-list (`Read`, `Glob`, `Grep`), a strict permission mode, a turn cap and `--json-schema`. Model is set by a repository variable, default `claude-sonnet-5-5` **(Pratik)**.
 
 **Codex cross-review.** `openai/codex-action@v1` with a prompt file, the read-only safety strategy and `output-schema-file`. It receives the code and Claude's findings file. Model left at the Codex default unless measured cost says otherwise.
 
@@ -299,7 +299,7 @@ Lab 03 comes before the generator on purpose **(Vanilla's call)**: Pratik should
 
 **Honest timeline:** at 10+ hours a week this is 8 to 10 weeks, not the 3 to 4 weeks first estimated, because four upgrades were moved into the core build.
 
-**Branches.** Labs, skeletons and checks are developed on `claude/youthful-sagan-mt8uqi` and reach `main` by a pull request Pratik opens. Reference solutions live on a `reference-solutions` branch. The coach needs Pratik's explicit go-ahead to push that second branch.
+**Branches.** Labs, skeletons and checks are developed on `claude/youthful-sagan-mt8uqi` and reach `main` by a pull request Pratik opens. Reference solutions live on a `reference-solutions` branch, which Pratik has authorised the coach to create and push.
 
 **Build order for the coach:** write the reference solution first and test what can be tested without AWS, then derive each skeleton by removing the core logic, and confirm each acceptance check fails on the skeleton and passes on the reference.
 
@@ -315,7 +315,7 @@ The reference branch lists each unverified step with the command Pratik runs to 
 
 ## 9. Cost
 
-**Claude review model.** Prices from Anthropic's model table (cached 2026-11-03): Opus 5.5 at $4 input and $20 output per million tokens; Sonnet 5.5 at $2 and $10. A review of one small function is estimated at roughly $0.15 to $0.40 on Opus 5.5 and about half that on Sonnet 5.5. This is an estimate, not a measurement; Lab 07 measures it. Opus 5.5 is the default because the review is the security-critical step. The model is a repository variable, and the choice is Pratik's.
+**Claude review model.** Prices from Anthropic's model table (cached 2026-11-03): Opus 5.5 at $4 input and $20 output per million tokens; Sonnet 5.5 at $2 and $10. A review of one small function is estimated at roughly $0.15 to $0.40 on Opus 5.5 and about half that on Sonnet 5.5. This is an estimate, not a measurement; Lab 07 measures it. Pratik chose Sonnet 5.5 as the default. The model is a repository variable, so the Lab 13 benchmark can compare it with Opus 5.5 later.
 
 **OpenAI.** Codex cross-review cost per run is unknown **(unverified)**; Lab 08 measures it. Codex Security is capped per run by `max-cost`.
 
