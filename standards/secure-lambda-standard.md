@@ -90,7 +90,7 @@ Globals:
 
 **Rule:** `FunctionName` is `lfg-${Stage}-<spec name>`.
 
-**Why it matters:** Permissions boundaries, cost reports and clean-up scripts identify toolkit-managed functions by the `lfg-<stage>-` prefix. A function with another name escapes those controls, and a function without the stage in its name could collide with, or overwrite, its twin in the other stage.
+**Why it matters:** The deploy role's IAM policy is scoped to resources with the `lfg-<stage>-` prefix, and cost reports and clean-up scripts rely on it too. A function with another name falls outside those controls, and a function without the stage in its name could collide with, or overwrite, its twin in the other stage.
 
 Compliant (spec name `nightly-report`):
 
@@ -118,7 +118,7 @@ Compliant (spec and template agree):
 # spec
 permissions:
   - actions: ["sqs:SendMessage"]
-    resources: ["arn:aws:sqs:eu-west-1:111122223333:lfg-dev-alerts"]
+    resources: ["arn:aws:sqs:eu-west-1:<account-id>:lfg-dev-alerts"]
     reason: Sends an alert when the report fails.
 ```
 
@@ -242,7 +242,7 @@ Non-compliant:
 
 **Rule:** Permissions are inline statements only: no managed policies and no SAM policy templates.
 
-**Why it matters:** A managed policy or SAM policy template hides its contents behind a name. The meaning can be broader than the name suggests, and an AWS-managed policy can change without the template changing. Inline statements put every permission in front of the reviewer, where the check against the spec can see them.
+**Why it matters:** A managed policy or SAM policy template hides its contents behind a name. The meaning can be broader than the name suggests, and an AWS-managed policy can change without the template changing. Inline statements put every permission the template author wrote in front of the reviewer, where the check against the spec can see them. One exception is expected: SAM automatically attaches the AWS-managed policy `AWSLambdaBasicExecutionRole` to every role it generates, which is why the function can write logs without a statement for it. The checker inspects what the author wrote under `Policies`, and the permissions boundary (LFG-IAM-004) caps everything the role can do, including that implicit policy.
 
 Compliant:
 
@@ -258,7 +258,7 @@ Non-compliant:
 
 ```yaml
 Policies:
-  - AWSLambdaBasicExecutionRole
+  - AmazonS3FullAccess
   - SQSSendMessagePolicy:
       QueueName: !GetAtt AlertQueue.QueueName
 ```
@@ -282,7 +282,7 @@ Non-compliant:
 
 ```yaml
 Properties:
-  Role: arn:aws:iam::111122223333:role/some-existing-role
+  Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/some-existing-role"
 ```
 
 **CWE:** CWE-269. **OWASP Serverless Top 10:** over-privileged function permissions and roles.
@@ -385,7 +385,7 @@ Action: s3:Get*
 
 **Rule:** No secret values in environment variables.
 
-**Why it matters:** Environment variables are stored in plain text in the template and in the function's configuration, and anyone who can read that configuration can read the value. Templates are also kept in version control. Pass only a reference, such as a parameter name or secret ARN, and let the function fetch the value at run time with permission. Names containing words like `password`, `token` or `secret` are treated as suspect unless they end in `_ARN`, `_NAME`, `_PARAM` or `_ID`.
+**Why it matters:** Lambda encrypts environment variables at rest, but the value is still exposed in clear text in the template, in the repository history, in console and API output to anyone who can call `lambda:GetFunctionConfiguration`, and in the function's runtime environment. A secret store adds what an environment variable lacks: access control on each secret and an audit trail of who read it. Pass only a reference, such as a parameter name or secret ARN, and let the function fetch the value at run time with permission. Names containing words like `password`, `token` or `secret` are treated as suspect unless they end in `_ARN`, `_NAME`, `_PARAM` or `_ID`.
 
 Compliant:
 
@@ -418,7 +418,7 @@ import os
 import boto3
 
 name = os.environ["API_KEY_PARAM"]
-value = boto3.client("ssm").get_parameter(Name=name, WithDecryption=True)
+value = boto3.client("ssm").get_parameter(Name=name, WithDecryption=True)["Parameter"]["Value"]
 ```
 
 Non-compliant:
@@ -530,7 +530,7 @@ Compliant `requirements.txt`:
 
 ```text
 requests==2.32.3 \
-    --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000
+    --hash=sha256:<64-hex-digit-hash>
 ```
 
 Non-compliant `requirements.txt`:
