@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+from lfg import cli
 from lfg.cli import main
 from lfg.labcheck import ManifestError, load_manifest, run
 
@@ -85,9 +86,12 @@ def test_cli_labcheck_without_lab_is_usage_error(capsys):
     assert capsys.readouterr().err.startswith("error:")
 
 
-def test_cli_labcheck_empty_lab(capsys):
-    assert main(["labcheck", "02"]) == 0
-    assert "Lab 02 has no checks yet" in capsys.readouterr().out
+def test_cli_labcheck_empty_lab(tmp_path, monkeypatch, capsys):
+    root = make_repo(tmp_path, manifest_for("[]"))
+    # The CLI finds the repository root from its own location; point it at the temporary one.
+    monkeypatch.setattr(cli, "__file__", str(root / "tools" / "lfg" / "cli.py"))
+    assert main(["labcheck", "01"]) == 0
+    assert "Lab 01 has no checks yet" in capsys.readouterr().out
 
 
 def test_check_collecting_no_tests_returns_1_with_message(tmp_path, capsys):

@@ -15,5 +15,19 @@ labs:
   "02":
     title: Function spec and policy checker
     dir: labs/02-spec-and-policy
-    owned: []
-    checks: []
+    owned:
+      - schemas/function-spec.schema.json
+      - tools/lfg/spec.py
+      - tools/lfg/policy/__init__.py
+      - tools/lfg/policy/acceptance.py
+      - tools/lfg/policy/template_rules.py
+      - tools/lfg/policy/iam_rules.py
+      - tools/lfg/policy/config_rules.py
+    checks:
+      - tests/lfg/test_spec.py
+      - tests/lfg/test_cli_validate_spec.py
+      - tests/lfg/test_policy_engine.py
+      - tests/lfg/test_policy_template.py
+      - tests/lfg/test_policy_iam.py
+      - tests/lfg/test_policy_config.py
+      - tests/lfg/test_cli_policy_check.py
