@@ -76,6 +76,10 @@ def _set_resource(name, value):
     return mutate
 
 
+def _properties_not_a_mapping(spec, template):
+    template["Resources"]["Function"]["Properties"] = ["x"]
+
+
 def _spec(key, value):
     def mutate(spec, template):
         spec[key] = value
@@ -227,6 +231,11 @@ MUTATIONS = [
     ("function_url_a_list", _property("FunctionUrlConfig", [{"AuthType": "AWS_IAM"}]), {NET}),
     ("function_url_a_string", _property("FunctionUrlConfig", "AWS_IAM"), {NET}),
     ("function_url_null", _property("FunctionUrlConfig", None), {NET}),
+    (
+        "properties_not_a_mapping",
+        _properties_not_a_mapping,
+        {"LFG-IAM-004", LOG, "LFG-NAME-001", REL, "LFG-RUN-001", "LFG-SPEC-002"},
+    ),
 ]
 
 

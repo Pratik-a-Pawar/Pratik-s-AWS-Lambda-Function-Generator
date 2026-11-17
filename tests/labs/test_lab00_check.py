@@ -10,6 +10,11 @@ ROOT = Path(__file__).resolve().parents[2]
 REFERENCE = ROOT / "labs" / "00-workstation" / "answers.md"
 SKELETON = ROOT / "labs" / "00-workstation" / "skeleton" / "labs" / "00-workstation" / "answers.md"
 ANSWER = "An answer that is comfortably longer than forty characters."
+# On the learner branch the skeletons have replaced the reference and the skeleton/ directory
+# is gone, so tests that read either one only make sense on the reference branch.
+reference_only = pytest.mark.skipif(
+    not (ROOT / "labs" / "00-workstation" / "skeleton").is_dir(), reason="reference-branch only"
+)
 
 
 def answers(**overrides: str) -> str:
@@ -21,10 +26,12 @@ def test_complete_answers_have_no_problems(lab00):
     assert lab00.answer_problems(answers()) == []
 
 
+@reference_only
 def test_reference_answers_have_no_problems(lab00):
     assert lab00.answer_problems(REFERENCE.read_text(encoding="utf-8")) == []
 
 
+@reference_only
 def test_skeleton_answers_are_all_todo(lab00):
     problems = lab00.answer_problems(SKELETON.read_text(encoding="utf-8"))
     assert problems == [f"the answer under '## Q{n}' still contains TODO" for n in range(1, 7)]

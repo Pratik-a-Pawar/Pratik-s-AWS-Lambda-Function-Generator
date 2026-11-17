@@ -7,6 +7,11 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 REFERENCE = ROOT / "docs" / "threat-model.md"
 SKELETON = ROOT / "labs" / "01-threat-model" / "skeleton" / "docs" / "threat-model.md"
+# On the learner branch the skeleton has replaced the reference and the skeleton/ directory
+# is gone, so tests that read either one only make sense on the reference branch.
+reference_only = pytest.mark.skipif(
+    not (ROOT / "labs" / "01-threat-model" / "skeleton").is_dir(), reason="reference-branch only"
+)
 
 HEADER = "| ID | Component | STRIDE | Threat | Mitigation | Status |\n|---|---|---|---|---|---|\n"
 
@@ -86,12 +91,14 @@ def test_stride_categories_reads_several_and_ignores_case(lab01):
     assert found == {"Tampering", "Elevation of privilege"}
 
 
+@reference_only
 def test_reference_threat_model_passes_every_check(lab01, monkeypatch):
     monkeypatch.setattr(lab01, "THREAT_MODEL", REFERENCE)
     for check in checks(lab01):
         check()
 
 
+@reference_only
 @pytest.mark.parametrize("name", [
     "test_data_flow_diagram_is_a_code_block",
     "test_enough_threats",
@@ -104,6 +111,7 @@ def test_skeleton_fails(lab01, monkeypatch, name):
         getattr(lab01, name)()
 
 
+@reference_only
 def test_skeleton_has_the_headings_and_columns(lab01, monkeypatch):
     monkeypatch.setattr(lab01, "THREAT_MODEL", SKELETON)
     lab01.test_headings_present()

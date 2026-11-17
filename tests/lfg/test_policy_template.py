@@ -145,10 +145,6 @@ def _events_not_a_mapping(spec, template):
     _props(template)["Events"] = ["Daily"]
 
 
-def _properties_not_a_mapping(spec, template):
-    template["Resources"]["Function"]["Properties"] = ["x"]
-
-
 def _runtime_unhashable(spec, template):
     _props(template)["Runtime"] = {"Ref": "R"}
 
@@ -274,11 +270,6 @@ MUTATIONS = [
     ("trigger_type_list", _trigger_type_list, {"LFG-TRG-001"}),
     ("trigger_type_mapping", _trigger_type_mapping, {"LFG-TRG-001"}),
     ("events_not_a_mapping", _events_not_a_mapping, {"LFG-SPEC-002"}),
-    (
-        "properties_not_a_mapping",
-        _properties_not_a_mapping,
-        {"LFG-IAM-004", "LFG-LOG-001", "LFG-NAME-001", "LFG-REL-001", "LFG-RUN-001", "LFG-SPEC-002"},
-    ),
     ("runtime_unhashable", _runtime_unhashable, {"LFG-RUN-001", "LFG-SPEC-002"}),
     ("fn_assume_role_policy_document", _function_property("AssumeRolePolicyDocument", {}), {"LFG-TPL-003"}),
     ("fn_deployment_preference", _function_property("DeploymentPreference", {}), {"LFG-TPL-003"}),
