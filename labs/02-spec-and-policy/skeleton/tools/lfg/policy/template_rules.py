@@ -61,9 +61,9 @@ def check_template(spec: dict, template: dict, catalogue: Catalogue) -> list[Vio
     LFG-TPL-002: a Globals section, at Globals. (Globals is on the section allow-list so that
     this rule, not LFG-TPL-004, reports it.)
 
-    LFG-TPL-001: each resource whose Type is not a string in catalogue.allowed_resource_types,
-    including a resource that is not a mapping, at Resources.<name>.Type; and, when
-    get_function finds no function, one violation at Resources.
+    LFG-TPL-001: each resource whose Type is not on catalogue.allowed_resource_types, at
+    Resources.<name>.Type; and, when get_function finds no function, one violation at
+    Resources.
 
     When get_function finds the function, also:
 
@@ -72,15 +72,14 @@ def check_template(spec: dict, template: dict, catalogue: Catalogue) -> list[Vio
 
     LFG-RUN-001: Runtime not in ALLOWED_RUNTIMES, at Resources.<id>.Properties.Runtime.
 
-    LFG-RUN-002: Timeout an integer (a bool is not one) above LONG_TIMEOUT_SECONDS, at
-    Resources.<id>.Properties.Timeout.
+    LFG-RUN-002: Timeout above LONG_TIMEOUT_SECONDS, at Resources.<id>.Properties.Timeout.
 
     LFG-SPEC-002, settings, each at Resources.<id>.Properties.<Property>:
     - Runtime differs from the spec's runtime;
     - Architectures is not a one-item list holding the spec's architecture;
-    - Timeout or MemorySize differs from the spec's timeout or memory, in value or in type.
+    - Timeout or MemorySize differs from the spec's timeout or memory.
 
-    LFG-TRG-001: the spec's trigger.type is not a string in catalogue.enabled_triggers, at
+    LFG-TRG-001: the spec's trigger.type is not one of catalogue.enabled_triggers, at
     function.spec.yaml:trigger.type. The trigger checks below then do not run.
 
     LFG-SPEC-002, trigger, each a single violation that ends the trigger checks:
@@ -92,7 +91,7 @@ def check_template(spec: dict, template: dict, catalogue: Catalogue) -> list[Vio
     trigger.expression and ScheduleExpressionTimezone with trigger.timezone ("UTC" when the
     spec leaves it out); an eventbridge trigger compares Pattern with trigger.pattern.
 
-    LFG-TPL-003, allow-lists (keys that are not strings are refused like any other):
+    LFG-TPL-003, allow-lists:
     - each key of the function resource not in catalogue.allowed_function_attributes, at
       Resources.<id>.<key>;
     - each key of its Properties not in catalogue.allowed_function_properties, at
@@ -102,5 +101,9 @@ def check_template(spec: dict, template: dict, catalogue: Catalogue) -> list[Vio
       Resources.<id>.Properties.Events.<event>.<key>, and each key of the event's Properties
       not in catalogue.allowed_event_properties for that event type, at
       Resources.<id>.Properties.Events.<event>.Properties.<key>.
+
+    Fail closed. Every section, resource, property and spec field read here can be any YAML
+    value, or missing. None may raise an exception, and none may pass unless it is a shape the
+    standard allows. The rows of tests/lfg/test_policy_template.py are the exact cases.
     """
     raise NotImplementedError("Lab 02, part B: check the template rules")
