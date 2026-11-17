@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Lambda function spec",
+  "type": "object",
+  "description": "Lab 02, part A: write this schema. The fields and their constraints are in the field table in labs/02-spec-and-policy/README.md (part A), drawn from section 5.1 of docs/superpowers/specs/2026-11-16-lambda-function-generator-design.md. tests/lfg/fixtures/good/function.spec.yaml must stay valid."
+}
