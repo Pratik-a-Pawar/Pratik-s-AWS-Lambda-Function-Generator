@@ -86,6 +86,43 @@ CASES = {
 }
 
 
+def _secret(name):
+    def mutate(spec):
+        spec["secrets"] = [{"name": name, "source": "ssm", "reference": "/lfg/dev/x"}]
+
+    return mutate
+
+
+def _env(name):
+    def mutate(spec):
+        spec["environment"] = {name: "x"}
+
+    return mutate
+
+
+def _http_path(path):
+    def mutate(spec):
+        spec["trigger"] = {"type": "http", "method": "GET", "path": path, "auth": "iam"}
+
+    return mutate
+
+
+# A pattern ending in "$" also matches before a final newline in Python's re, which the
+# jsonschema package uses, so every pattern-constrained string is tried with one.
+TRAILING_NEWLINE = {
+    "name": (lambda s: _set(s, "name", "iam-key-age-audit\n"), "name"),
+    "environment_name": (_env("MAX_KEY_AGE_DAYS\n"), "environment"),
+    "secret_name": (_secret("DB_PASSWORD_PARAM\n"), "secrets[0].name"),
+    "permission_action": (
+        lambda s: s["permissions"][1].update(actions=["sns:Publish\n"]),
+        "permissions[1].actions[0]",
+    ),
+    "acceptance_rule_id": (_acceptance(rule_id="LFG-RUN-002\n"), "risk_acceptances[0].rule_id"),
+    "acceptance_expires": (_acceptance(expires="2027-01-31\n"), "risk_acceptances[0].expires"),
+    "http_path": (_http_path("/health\n"), "trigger"),
+}
+
+
 def test_good_spec_has_no_errors(good_spec):
     assert validate_spec(good_spec) == []
 
@@ -96,6 +133,20 @@ def test_invalid_spec_reports_path(good_spec, mutate, expected):
     mutate(spec)
     errors = validate_spec(spec)
     assert expected in [e.path for e in errors], errors
+
+
+@pytest.mark.parametrize("mutate,expected", TRAILING_NEWLINE.values(), ids=TRAILING_NEWLINE.keys())
+def test_trailing_newline_is_rejected(good_spec, mutate, expected):
+    spec = copy.deepcopy(good_spec)
+    mutate(spec)
+    assert expected in [e.path for e in validate_spec(spec)]
+
+
+@pytest.mark.parametrize("mutate", [_env("MAX_KEY_AGE_DAYS"), _secret("DB_PASSWORD_PARAM"),
+                                    _http_path("/health")])
+def test_same_values_without_newline_are_valid(good_spec, mutate):
+    mutate(good_spec)
+    assert validate_spec(good_spec) == []
 
 
 def test_errors_sorted_by_path(good_spec):
