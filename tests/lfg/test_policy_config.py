@@ -219,6 +219,7 @@ MUTATIONS = [
     ("destination_config_a_list", _destination_config([ON_FAILURE], keep_dlq=False), {REL}),
     ("event_invoke_config_a_string", _property("EventInvokeConfig", "x"), {REL}),
     ("event_invoke_config_no_destination", _property("EventInvokeConfig", {"MaximumRetryAttempts": 1}), set()),
+    ("event_invoke_config_is_not_a_destination", _destination_config({}, keep_dlq=False), {REL}),
     ("function_url_none", _property("FunctionUrlConfig", {"AuthType": "NONE"}), {NET}),
     ("function_url_iam", _property("FunctionUrlConfig", {"AuthType": "AWS_IAM"}), set()),
     ("function_url_missing_auth", _property("FunctionUrlConfig", {}), {NET}),

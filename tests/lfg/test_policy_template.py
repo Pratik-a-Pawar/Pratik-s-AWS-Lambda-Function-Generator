@@ -74,6 +74,11 @@ def _memory_mismatch(spec, template):
     _props(template)["MemorySize"] = 512
 
 
+def _timeout_at_limit(spec, template):
+    spec["timeout"] = 60
+    _props(template)["Timeout"] = 60
+
+
 def _event_type_mismatch(spec, template):
     _event(template)["Type"] = "EventBridgeRule"
 
@@ -254,6 +259,7 @@ MUTATIONS = [
     ("arch_mismatch", _arch_mismatch, {"LFG-SPEC-002"}),
     ("timeout_mismatch", _timeout_mismatch, {"LFG-SPEC-002"}),
     ("memory_mismatch", _memory_mismatch, {"LFG-SPEC-002"}),
+    ("timeout_at_limit_is_not_long", _timeout_at_limit, set()),
     ("event_type_mismatch", _event_type_mismatch, {"LFG-SPEC-002"}),
     ("no_events", _no_events, {"LFG-SPEC-002"}),
     ("two_events", _two_events, {"LFG-SPEC-002"}),

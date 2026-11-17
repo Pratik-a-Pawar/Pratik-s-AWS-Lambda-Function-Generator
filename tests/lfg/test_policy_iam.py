@@ -202,6 +202,12 @@ MUTATIONS = [
         {"LFG-IAM-005"},
     ),
     ("star_resource_wildcard_only", lambda spec, template: None, set()),
+    (
+        "star_resource_mixed_with_scopable",
+        _stmt0(Action=["iam:GetCredentialReport", "sns:Publish"]),
+        {"LFG-IAM-005"},
+    ),
+    ("star_resource_second_in_list", _res1([{"Ref": "AlertTopic"}, "*"]), {"LFG-IAM-005"}),
     ("describe_wildcard_only", _add("ec2:DescribeSecurityGroups", "*"), set()),
     ("sensitive_action", _add("ec2:RevokeSecurityGroupIngress"), {"LFG-IAM-006"}),
     ("sensitive_action_case", _case_variant, {"LFG-IAM-006"}),
@@ -211,10 +217,20 @@ MUTATIONS = [
     ("resource_missing", _stmt0(Resource=_DELETE), {"LFG-IAM-007"}),
     ("statement_not_mapping", _statement_value(["oops"]), {"LFG-IAM-007"}),
     ("statement_is_mapping", _single_statement, set()),
+    (
+        "statement_mapping_is_checked",
+        _statement_value({"Effect": "Allow", "Action": "*", "Resource": "*"}),
+        {"LFG-IAM-001"},
+    ),
     ("action_wildcard_suffix", _add("s3:Get*"), {"LFG-IAM-008"}),
     ("service_star", _add("s3:*"), {"LFG-IAM-006", "LFG-IAM-008"}),
     ("wildcard_covers_sensitive", _add("iam:Pass*"), {"LFG-IAM-006", "LFG-IAM-008"}),
     ("undeclared_action", _add("s3:GetObject", declared=False), {"LFG-SPEC-001"}),
+    (
+        "undeclared_wildcard_action",
+        _add("s3:Get*", declared=False),
+        {"LFG-IAM-008", "LFG-SPEC-001"},
+    ),
     ("declared_case_differs", _declared_case, set()),
     ("no_policies", _no_policies, set()),
     # Unexpected shapes: every one is a violation, never an exception.

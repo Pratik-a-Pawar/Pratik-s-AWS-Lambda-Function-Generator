@@ -60,7 +60,7 @@ def test_expired_acceptance_is_reported(good_dir, good_spec, good_template):
     assert [v.location for v in ra] == ["function.spec.yaml:risk_acceptances[0]"]
 
 
-@pytest.mark.parametrize("rule_id", ["LFG-IAM-001", "LFG-XYZ-999"])
+@pytest.mark.parametrize("rule_id", ["LFG-IAM-001", "LFG-LOG-001", "LFG-XYZ-999"])
 def test_unacceptable_rule_is_reported(good_dir, good_spec, good_template, rule_id):
     _accept(good_spec, rule_id, "2026-12-31")
     assert rule_ids(_run(good_dir, good_spec, good_template)) == {"LFG-RA-001"}
