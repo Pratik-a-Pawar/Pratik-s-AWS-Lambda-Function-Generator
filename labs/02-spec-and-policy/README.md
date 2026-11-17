@@ -19,7 +19,7 @@ This checker was built by an AI coach first, and reviews found exactly those gap
 - Read `standards/secure-lambda-standard.md` in full before writing any code. It is the specification in prose: every rule, why it exists, and what it does not cover.
 - Read sections 5.1 and 5.2 of the design (`docs/superpowers/specs/2026-11-16-lambda-function-generator-design.md`) and skim `standards/rules.yaml`.
 - Treat the tests as the exact specification. Each row of each policy test table names a mutation of the good fixture (`tests/lfg/fixtures/good/`) and the exact set of blocking rule IDs it must produce, no more and no fewer. Each row of the spec test table names a mutation and the path at which an error must be reported. When the standard and a test seem to disagree, the test decides what passes; tell the coach about the disagreement.
-- Know which files are yours. You write seven files, which start as skeletons: `schemas/function-spec.schema.json`, `tools/lfg/spec.py` and the five files in `tools/lfg/policy/`. Each skeleton's docstrings state the contract: inputs, outputs, rule IDs and location strings. Everything else is already written and you should not need to change it: `tools/lfg/cli.py`, `cfn_yaml.py`, `yaml_util.py`, `rules.py`, `labcheck.py`, the catalogue and the tests. Do not edit anything under `tests/` or `standards/` until the boss challenge.
+- Know which files are yours. You write seven files, which start as skeletons: `schemas/function-spec.schema.json`, `tools/lfg/spec.py` and the five files in `tools/lfg/policy/`. Each skeleton's docstrings fix the interface: inputs, outputs, rule IDs, location strings and what must fail closed. The standard and the test rows supply the rest. Everything else is already written and you should not need to change it: `tools/lfg/cli.py`, `cfn_yaml.py`, `yaml_util.py`, `rules.py`, `labcheck.py`, the catalogue and the tests. Do not edit anything under `tests/` or `standards/` until the boss challenge.
 - Run the lab check once now so you have a baseline. Almost everything fails with `NotImplementedError`; that is expected.
 
 ```bash
@@ -42,11 +42,11 @@ Answer from primary sources: the AWS IAM User Guide (its policy evaluation logic
 **IAM**
 
 5. How does IAM evaluate a permissions boundary together with an identity-based policy? If the boundary allows `s3:GetObject` and the role's policy allows `s3:*`, what can the role do? What if the role's policy allows only `sns:Publish`? Does a boundary limit what a resource-based policy grants?
-6. What does `?` mean in an IAM action? Where else in a policy are wildcards interpreted, and are actions compared with or without regard to case?
+6. The standard says IAM reads `?` in an action as a wildcard. Find where the IAM User Guide says so. Then go beyond the standard: are wildcards also interpreted in `Resource`, and in condition values (with which condition operators)? Are action names compared with regard to case, and are resource ARNs? Would it be safe for this checker to compare resource ARNs the way it compares actions?
 7. What is a SAM policy template, what does one turn into when SAM processes the template, and why does this checker refuse them even though AWS publishes them?
 8. The standard says a `ScheduleV2` event can create an IAM role of its own. Confirm that in the AWS SAM documentation and find which of the event's properties control that role. Why does the checker demand the boundary there too?
 9. Why is a deploy role that can create IAM roles dangerous? Which IAM condition key lets you require that every role it creates carries a given permissions boundary, and which actions should that condition be attached to?
-10. What does SAM add to the function's role when you give it a `DeadLetterQueue` or an `OnFailure` destination? Why does that make a destination outside the template a risk, even though it never appears under `Policies`?
+10. The standard says SAM adds send permissions to the function's role for a `DeadLetterQueue` or an `OnFailure` destination. Find in the AWS SAM documentation exactly which actions it adds, on which resources, for an SQS and for an SNS destination. Must `lfg-function-boundary` allow those actions for the destination to work? What does your answer mean for how the boundary policy in Lab 04 has to be written, and for what a reviewer of the spec cannot see?
 
 **Parsing**
 
@@ -99,7 +99,7 @@ The schema accepts all five trigger types, because later plans enable them. Refu
 
 3. Implement `load_spec` and `validate_spec` in `tools/lfg/spec.py` to the contract in their docstrings.
 
-4. Probe your schema by hand: copy the good fixture, set `name` to a valid name followed by a newline (in YAML, a double-quoted string ending in `\n`), and run `lfg validate-spec` on the copy. Explain the result using your answer to research question 12, and write down what you would change. No test checks this; it is a finding to discuss with the coach.
+4. Probe your schema by hand: copy the good fixture, set `name` to a valid name followed by a newline (in YAML, a double-quoted string ending in `\n`), and run `lfg validate-spec` on the copy. Explain the result using your answer to research question 12. If your schema accepts the name, change it so that it does not, in a way that still means the same in other JSON Schema implementations, and check that every other pattern in your schema has the same property. The spec tests include this case.
 
 ```bash
 cp -r tests/lfg/fixtures/good /tmp/lab02-name
@@ -155,14 +155,14 @@ git commit -m "Lab 02 part B: policy engine, risk acceptances and template rules
 
 ### Part C: the IAM rules
 
-1. Read LFG-IAM-001 to LFG-IAM-008 and LFG-SPEC-001 in the standard, then the `check_iam` docstring.
+1. Read LFG-IAM-001 to LFG-IAM-008 and LFG-SPEC-001 in the standard.
 
 2. Before writing any code, attack the rules on paper. In a scratch file outside the repository, write down:
    - five ways to express "every resource" in a `Resource` without typing a bare `*`;
    - five ways to write an action that covers `iam:PassRole` without typing `iam:PassRole`;
    - three ways to give the function a role that the permissions boundary does not constrain.
 
-3. Implement `check_iam`. Do not open `tests/lfg/test_policy_iam.py` yet.
+3. Read the `check_iam` docstring for the interface (locations, what to return), then implement it. Do not open `tests/lfg/test_policy_iam.py` yet.
 
 4. Run your attack list against your own checker. Copy the good fixture, edit its `template.yaml`, declare any action you add in its spec too (so that the only violations you see are the ones your attempt should cause), and run the command once per attempt. For each attempt that passes, decide which rule should have caught it and fix your code.
 
@@ -174,7 +174,7 @@ cp -r tests/lfg/fixtures/good /tmp/lab02-attack
 lfg policy-check /tmp/lab02-attack
 ```
 
-5. Only now run the IAM checks. Read the groups of test rows that start with the comments `R1` to `R7`, `F1` and `F2`: each group is a way past the rules that a review of an earlier version of this checker found. Compare them with your list and note which ones you did not think of.
+5. Only now run the IAM checks. Read the groups of test rows that start with the comments `R1` to `R5`, `R7`, `F1` and `F2` (there is no `R6`): each group is a way past the rules that a review of an earlier version of this checker found. Compare them with your list and note which ones you did not think of.
 
 ```bash
 pytest tests/lfg/test_policy_iam.py
@@ -196,7 +196,7 @@ git commit -m "Lab 02 part C: IAM rules"
 
 2. Implement `check_config`, rule by rule.
 
-3. Read `_policy_check` in `tools/lfg/cli.py`. It is already written and calls your code. Work out, before you run anything, which exit code and output each of these gives: the good fixture; a fixture with `Timeout: 120` in both files; the same with a valid acceptance for LFG-RUN-002; a spec that fails the schema; a missing `src/` directory. Then check your predictions.
+3. Read `_policy_check` in `tools/lfg/cli.py`. It is already written and calls your code. Work out, before you run anything, which exit code and output each of these gives: the good fixture; a fixture with `Timeout: 120` in the template and `timeout: 120` in the spec; the same with a valid acceptance for LFG-RUN-002; a spec that fails the schema; a missing `src/` directory. Then check your predictions.
 
 ```bash
 lfg policy-check tests/lfg/fixtures/good
@@ -236,45 +236,47 @@ git commit -m "Lab 02 part D: configuration rules"
 
 ## Hints
 
+The hints run from gentle to strong. Open one only when you are stuck.
+
 <details><summary>Hint 1: where to start each part</summary>
 
 Make the good fixture pass before anything else. A checker that reports a violation on the good fixture fails nearly every row of every table, which hides the one thing you are working on. Then take one test row at a time with `-k`.
 
 </details>
 
-<details><summary>Hint 2: getting every schema error, with its location</summary>
-
-The jsonschema documentation describes a way to get all errors from a validator rather than the first one, and an error object has more than one attribute that describes where it is. Read what `path`, `relative_path` and `absolute_path` each mean, and choose one.
-
-</details>
-
-<details><summary>Hint 3: dates and acceptances</summary>
-
-Look at which Python types PyYAML returns for `2027-01-31` and for `2027-01-31T10:00:00`, and how those two types are related. For expiry, decide first how you will reject a string that `fromisoformat` would accept but that is not written `YYYY-MM-DD`.
-
-</details>
-
-<details><summary>Hint 4: writing a rule that fails closed</summary>
-
-Describe the one good shape exactly ("a mapping whose only keys are A and B, where A is exactly this string") and treat everything that is not that shape as a violation. Checking for each bad shape you can think of is the deny-list mistake in miniature. Exact equality against a known value (`==` on a whole mapping, or a type check plus a value check) is often all a rule needs.
-
-</details>
-
-<details><summary>Hint 5: locations</summary>
+<details><summary>Hint 2: locations</summary>
 
 Build one base location string per function (`template.yaml:Resources.<id>.Properties`) and extend it as you walk down. Most location bugs come from building the same string in two places.
 
 </details>
 
-<details><summary>Hint 6: wildcards in actions</summary>
+<details><summary>Hint 3: writing a rule that fails closed</summary>
 
-The `fnmatch` module has two functions that look the same. Read what the documentation says each one does with upper and lower case, and on which operating systems. For "could this wildcard action match a sensitive action?", compare the literal text before the first wildcard in each pattern.
+Describe the one good shape exactly ("a mapping whose only keys are A and B, where A is exactly this string") and treat everything that is not that shape as a violation. Checking for each bad shape you can think of is the deny-list mistake in miniature. Exact equality against a known value (`==` on a whole mapping, or a type check plus a value check) is often all a rule needs.
 
 </details>
 
-<details><summary>Hint 7: the whole string</summary>
+<details><summary>Hint 4: very deep templates</summary>
 
-Python's `re` module has `search`, `match` and `fullmatch`. Only one of them answers "is the entire string of this form?" without any help from anchors. Try each on `"iam:PassRole\n"`.
+Your walk for `Fn::Transform` probably recurses. Find out what Python does about 1,000 levels deep, then read how `cli.py` handles that case. Do not catch that exception inside your rule modules: a rule that swallows it and returns nothing would pass a template it never finished reading.
+
+</details>
+
+<details><summary>Hint 5: getting every schema error, with its location</summary>
+
+The jsonschema documentation describes a way to get all errors from a validator rather than the first one, and an error object has more than one attribute that describes where it is. Read what `path`, `relative_path` and `absolute_path` each mean, and choose one.
+
+</details>
+
+<details><summary>Hint 6: dates and acceptances</summary>
+
+Look at which Python types PyYAML returns for `2027-01-31` and for `2027-01-31T10:00:00`, and how those two types are related. For expiry, decide first how you will reject a string that `fromisoformat` would accept but that is not written `YYYY-MM-DD`.
+
+</details>
+
+<details><summary>Hint 7: wildcards in actions</summary>
+
+The `fnmatch` module has two functions that look the same. Read what the documentation says each one does with upper and lower case, and on which operating systems. Then, by hand, take pairs of patterns, at least one with a wildcard, such as `kms:Sched*` and `kms:ScheduleKeyDeletion`, or `lambda:*Code` and `lambda:Update*`, and ask whether any action name could match both. Which of those pairs does a single `fnmatch` call, in one direction, get wrong?
 
 </details>
 
@@ -284,9 +286,9 @@ Work in stages: join continuation lines, remove comments, then split each requir
 
 </details>
 
-<details><summary>Hint 9: very deep templates</summary>
+<details><summary>Hint 9: the whole string</summary>
 
-Your walk for `Fn::Transform` probably recurses. Find out what Python does about 1,000 levels deep, then read how `cli.py` handles that case. Do not catch that exception inside your rule modules: a rule that swallows it and returns nothing would pass a template it never finished reading.
+Python's `re` module has `search`, `match` and `fullmatch`. Only one of them answers "is the entire string of this form?" without any help from anchors. Try each on `"iam:PassRole\n"`.
 
 </details>
 
@@ -316,14 +318,14 @@ The whole lab:
 lfg labcheck 02
 ```
 
-Passing looks like `418 passed` and an exit code of `0`, with no `failed` and no `error` in the summary (41 for part A, 82 for part B, 146 for part C and 149 for part D). A row that passes by accident is still worth reading; if you cannot explain why it passes, you have found a gap in your understanding or in the tests, and both are worth telling the coach.
+Passing looks like `428 passed` and an exit code of `0`, with no `failed` and no `error` in the summary (51 for part A, 81 for part B, 146 for part C and 150 for part D). Each part's check passes on its own once that part and the parts before it are done. A row that passes by accident is still worth reading; if you cannot explain why it passes, you have found a gap in your understanding or in the tests, and both are worth telling the coach.
 
 ## Debrief
 
 1. Which of your attacks from part C did your first version miss, and which rule catches each one now?
 2. How many SAM function properties were missing from your list in part B? What does that number say about deny-lists?
 3. Where could your checker still fail open? Think about values the tests never try, and about what the standard says the checker cannot see.
-4. What did the newline probe in part A show, and how would you fix the schema without breaking it for other JSON Schema implementations?
+4. What did the newline probe in part A show, how did you change the schema, and how did you check that the change means the same outside Python?
 5. If Plan 6 enables the `sqs` trigger, which of your files change, and which rules need new test rows?
 
 ## Interview questions

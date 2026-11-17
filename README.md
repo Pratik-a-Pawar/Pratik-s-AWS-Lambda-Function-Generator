@@ -127,7 +127,7 @@ standards/             the secure Lambda standard and its machine-readable rule 
 schemas/               the function spec JSON Schema
 tools/lfg/             the lfg command-line tool: validate-spec, policy-check, labcheck
 tools/dev/             maintainer scripts, such as generating the learner branch
-tests/                 unit tests; tests/lfg/ is also Lab 02's acceptance check
+tests/                 unit tests; the seven tests/lfg/ files listed in labs/manifest.yaml check Lab 02
 docs/                  the design, the plans, the threat model and the learning roadmap
 ```
 
@@ -141,7 +141,7 @@ This repository is public. No secrets, AWS account IDs or email addresses are co
 
 ## Authorship
 
-The design, the lab track (briefs, skeletons and acceptance checks) and the reference solutions on the `reference-solutions` branch were written by an AI coach (Claude), from decisions Pratik made. Lab work merged to `main` is Pratik's own.
+The design, the lab track (briefs, skeletons and acceptance checks) and the reference solutions on the `reference-solutions` branch were written by an AI coach (Claude). The design records Pratik's decisions and marks the calls the coach made on its own. Lab work merged to `main` is Pratik's own.
 
 Branches:
 
